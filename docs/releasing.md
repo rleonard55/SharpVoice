@@ -5,11 +5,13 @@
 Install the .NET 10 SDK, Visual Studio 2022 C++ build tools and the Windows SDK. From the repository root:
 
 ```powershell
-./scripts/Build-Release.ps1 -Version 0.1.0
-./scripts/Test-ReleaseLifecycle.ps1 -ReleaseDirectory artifacts/releases/0.1.0
+./scripts/Build-Release.ps1 -Version 0.1.1
+./scripts/Test-ReleaseLifecycle.ps1 -ReleaseDirectory artifacts/releases/0.1.1
 ```
 
-`Build-Release.ps1` runs the complete offline suite through its Windows executable, publishes Native AOT with mapped source paths and native debug symbols disabled, checks that the executable contains neither the builder's project path nor home path, verifies its non-recording bootstrap/version command, then packages only the executable and public redistribution notices. The pinned SDK and packaging tool are both Velopack 1.2.161. `-SkipTests` is for local packaging iterations after a fresh complete test run; CI never uses it.
+`Build-Release.ps1` runs the complete offline suite through its Windows executable, publishes Native AOT with mapped source paths and native debug symbols disabled, checks that the executable contains neither the builder's project path nor home path, verifies its non-recording bootstrap/version command, then packages only the executable, verified Tiny Q5 English model, SharpVoice MIT license and public redistribution notices. The model is fetched from the official whisper.cpp Hugging Face repository into ignored build cache and SHA-256 checked before packaging. A native `--verify-bundled-model` check uses an isolated empty cache and blocks HTTP to prove first-run resolution works offline. The pinned SDK and packaging tool are both Velopack 1.2.161. `-SkipTests` is for local packaging iterations after a fresh complete test run; CI never uses it.
+
+The default installer, portable ZIP and full update package all include `models/ggml-tiny.en-q5_1.bin` beside the executable. This adds about 31 MiB before packaging compression; users need not download that model on first use. Other selections retain on-demand model downloads. Model binaries are ignored by Git and enter only release assets. Published 0.1.0 assets remain unchanged.
 
 Packages appear in `artifacts/releases/<version>/`:
 

@@ -19,7 +19,7 @@
 ## Quick start
 
 1. **[Download the installer](https://github.com/rleonard55/SharpVoice/releases/latest/download/SharpVoice-win-x64-Setup.exe)** and launch SharpVoice. It starts in the system tray; double-click the microphone icon to open Settings. A [portable ZIP](https://github.com/rleonard55/SharpVoice/releases/latest/download/SharpVoice-win-x64-Portable.zip) is also available.
-2. **Let the small speech model download.** Tiny Q5 is the default. AI cleanup starts off, so you can dictate without an AI account.
+2. **Start with the included speech model.** The default installer and portable ZIP include Tiny Q5 English—no separate model download needed. AI cleanup starts off, so you can dictate without an AI account.
 3. **Focus a text field**, hold **Ctrl + Alt**, wait for the tone, and speak. Release to transcribe and insert your words.
 
 Requires **Windows 10/11 x64** and an **AVX2/FMA-capable CPU**. No separate .NET installation is needed. Allow desktop microphone access in Windows Settings if prompted.

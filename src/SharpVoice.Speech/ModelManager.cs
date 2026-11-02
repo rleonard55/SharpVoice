@@ -3,8 +3,23 @@ using SharpVoice.Core;
 
 namespace SharpVoice.Speech;
 
-public sealed class ModelManager(HttpClient http)
+public sealed class ModelManager
 {
+    private readonly HttpClient http;
+    private readonly string modelDirectory;
+    private readonly string bundledDirectory;
+    private readonly Func<string, string> hashFor;
+
+    public ModelManager(HttpClient http, string? modelDirectory = null) : this(http, modelDirectory ?? AppPaths.Models, Path.Combine(AppContext.BaseDirectory, "models"), HashFor) { }
+
+    internal ModelManager(HttpClient http, string modelDirectory, string bundledDirectory, Func<string, string> hashFor)
+    {
+        this.http = http;
+        this.modelDirectory = modelDirectory;
+        this.bundledDirectory = bundledDirectory;
+        this.hashFor = hashFor;
+    }
+
     // SHA-256 values from upstream Hugging Face LFS metadata, not the model card's SHA-1 column.
     public static string HashFor(string model) => model switch
     {
@@ -21,15 +36,25 @@ public sealed class ModelManager(HttpClient http)
 
     public async Task<string> EnsureAsync(string model, Action<string> status, CancellationToken ct)
     {
-        var expected = HashFor(model);
+        var expected = hashFor(model);
         await gate.WaitAsync(ct);
         try
         {
-            Directory.CreateDirectory(AppPaths.Models);
-            var path = Path.Combine(AppPaths.Models, $"ggml-{model}.bin");
+            var path = Path.Combine(modelDirectory, $"ggml-{model}.bin");
             if (verified.Contains(path) && File.Exists(path)) return path;
             status($"Verifying {model} model…");
             if (File.Exists(path) && await VerifyAsync(path, expected, ct)) { verified.Add(path); return path; }
+            if (model == "tiny.en-q5_1")
+            {
+                var included = Path.Combine(bundledDirectory, $"ggml-{model}.bin");
+                if (File.Exists(included) && (verified.Contains(included) || await VerifyAsync(included, expected, ct)))
+                {
+                    verified.Add(included);
+                    status($"Using included {model} model");
+                    return included;
+                }
+            }
+            Directory.CreateDirectory(modelDirectory);
             var temporary = path + ".download";
             try
             {

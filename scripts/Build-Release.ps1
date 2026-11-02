@@ -1,5 +1,5 @@
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.1.0',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.1.1',
     [switch]$SkipTests
 )
 $ErrorActionPreference = 'Stop'
@@ -66,13 +66,33 @@ try {
     $null = Run-Tool $exe @('--release-info',$info) (Join-Path $work 'bootstrap.log')
     $metadata = Get-Content -LiteralPath $info -Raw | ConvertFrom-Json
     if ($metadata.version -ne $Version -or $metadata.updates_supported) { throw 'Native release bootstrap/version verification failed.' }
-    # Only the app and public redistribution notices enter the package directory.
+    # Only the app, verified default speech model and public notices enter the package.
     $staging = Join-Path $work 'package'
     New-Item -ItemType Directory -Path $staging,(Join-Path $staging 'licenses') -Force | Out-Null
     Copy-Item -LiteralPath $exe -Destination $staging
     Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $staging
     Copy-Item -Path (Join-Path $root 'docs/licenses/*-LICENSE') -Destination (Join-Path $staging 'licenses')
     Copy-Item -LiteralPath (Join-Path $root 'docs/third-party-notices.md') -Destination $staging
+    $modelName = 'ggml-tiny.en-q5_1.bin'
+    $modelHash = 'c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b'
+    $modelCache = Join-Path $root '.build-cache/release-models'
+    $model = Join-Path $modelCache $modelName
+    New-Item -ItemType Directory -Path $modelCache,(Join-Path $staging 'models') -Force | Out-Null
+    if (-not (Test-Path $model) -or (Get-FileHash -LiteralPath $model -Algorithm SHA256).Hash -ne $modelHash) {
+        $partial = Join-Path $work ($modelName + '.download')
+        Write-Host 'Downloading the default Tiny Q5 English model for packaging...'
+        try {
+            Invoke-WebRequest -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$modelName" -OutFile $partial -TimeoutSec 300
+            if ((Get-FileHash -LiteralPath $partial -Algorithm SHA256).Hash -ne $modelHash) { throw 'Bundled Whisper model SHA-256 mismatch.' }
+            Move-Item -LiteralPath $partial -Destination $model -Force
+        }
+        finally { if (Test-Path $partial) { Remove-Item -LiteralPath $partial -Force } }
+    }
+    Copy-Item -LiteralPath $model -Destination (Join-Path $staging 'models')
+    $bundledInfo = Join-Path $work 'bundled-model-info.json'
+    $null = Run-Tool (Join-Path $staging 'SharpVoice.exe') @('--verify-bundled-model',$bundledInfo) (Join-Path $work 'bundled-model.log')
+    $bundled = Get-Content -LiteralPath $bundledInfo -Raw | ConvertFrom-Json
+    if ($bundled.model -ne 'tiny.en-q5_1' -or $bundled.sha256 -ne $modelHash -or $bundled.network_requests -ne 0) { throw 'Packaged app failed offline default-model resolution.' }
     $null = Run-Tool $dotnet @('tool','restore','--tool-manifest','.config/dotnet-tools.json') (Join-Path $work 'tool-restore.log')
     $packOutput = Join-Path $work 'releases'
     Write-Host 'Building per-user installer, portable ZIP and update feed...'

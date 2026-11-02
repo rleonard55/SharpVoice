@@ -996,6 +996,10 @@ var tests = new (string Name, Func<Task> Run)[]
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes("data: test\n\n"));
         await ThrowsAsync<OperationCanceledException>(async () => { await foreach (var _ in SseParser.ReadAsync(stream, ct.Token)) { } });
     }),
+    ("Included Tiny Q5 English resolves without network or a duplicate cache", BundledModelChecks.UsesBundle),
+    ("Included speech model preserves valid cache priority and repairs corrupt cache", BundledModelChecks.CachePriority),
+    ("Missing or corrupt included models retain verified download recovery", BundledModelChecks.Recovery),
+    ("Included model resolution respects cancellation", BundledModelChecks.Cancellation),
     ("Model integrity check rejects changed bytes", async () =>
     {
         var path = Path.Combine(Path.GetTempPath(), $"sharpvoice-model-{Guid.NewGuid():N}");

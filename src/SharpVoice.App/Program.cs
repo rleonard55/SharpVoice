@@ -17,6 +17,7 @@ internal static class Program
             .OnBeforeUninstallFastCallback(_ => SharpVoice.Platform.Windows.WindowsLoginStartup.RemoveOwnedRegistration(Environment.ProcessPath ?? ""))
             .Run();
         if (args is ["--release-info", var output]) return ReleaseDiagnostics.Write(output);
+        if (args is ["--verify-bundled-model", var modelReport]) return ReleaseDiagnostics.VerifyBundledModel(modelReport);
         if (args is ["--diagnostics", var report]) return StartupDiagnostics.Run(report);
         using var singleInstance = new Mutex(true, @"Local\SharpVoice.Prototype", out var firstInstance);
         if (!firstInstance) { if (args is not ["--startup"]) Win32.MessageBoxW(0, "SharpVoice is already running. Look for its icon in the system tray.", "SharpVoice", 0x40); return 0; }

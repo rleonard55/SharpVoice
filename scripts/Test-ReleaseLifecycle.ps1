@@ -1,4 +1,4 @@
-param([string]$ReleaseDirectory = 'artifacts/releases/0.1.0')
+param([string]$ReleaseDirectory = 'artifacts/releases/0.1.1')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $dotnet = Join-Path $env:ProgramFiles 'dotnet/dotnet.exe'
@@ -69,6 +69,10 @@ try {
         Run $real @('--release-info',$report) 'real-portable-info'
         if(-not (Read-Report $report).updates_supported){throw 'Real portable package has no updater integration.'}
         Write-Host 'PASS real native release portable metadata without capture/authentication.'
+        Run $real @('--verify-bundled-model',$report) 'real-portable-bundled-model'
+        $bundled = Read-Report $report
+        if($bundled.model -ne 'tiny.en-q5_1' -or $bundled.network_requests -ne 0 -or $bundled.sha256 -ne 'c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b'){throw 'Portable default model is missing or requires the network.'}
+        Write-Host 'PASS real portable Tiny Q5 English resolves offline with its pinned hash.'
     }
     Write-Host "Lifecycle logs: $work"
 }
