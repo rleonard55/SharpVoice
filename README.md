@@ -39,6 +39,8 @@ Requires **Windows 10/11 x64** and an **AVX2/FMA-capable CPU**. No separate .NET
 
 Shortcuts are configurable, with hold or toggle recording. Ordinary dictation below **8 words** skips AI cleanup by default; Ask AI and selected-text edits always use AI. Optional wake phrases let you start without pressing a key.
 
+The [default cleanup prompt](Data/MasterPrompt.txt) is built into the app. **Prompts → General Instructions** adds optional preferences; leaving it blank keeps the packaged defaults.
+
 ## A small app, with room to grow
 
 <table>
