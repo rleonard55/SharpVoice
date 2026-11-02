@@ -116,7 +116,7 @@ Open **Settings → General** for **Personal Dictionary**, **Voice Snippets**, *
 
 In **Hotkeys → Recording Gesture**, **Hold to Talk (Default)** preserves push-to-talk. **Toggle** starts with one press and finishes with another, for both Dictation and Ask AI. Release the keys between presses. An optional **Silence Auto-Stop** of 1–30 seconds ends toggle recording when sound stays below the applied noise gate; **0 disables it**. Maximum recording duration and cancellation still apply. These options do not change On Hotkey microphone activation.
 
-The pill HUD places its title at the top left and smaller, muted, right-aligned model/status metadata on the same row. The lower area shows up to two lines of the current text.
+The pill HUD places its title at the top left and smaller, muted, right-aligned model/status metadata on the same row. The lower area shows up to two lines of the current text. The pill is 85% opaque and dismisses about 0.9 seconds after a successful paste; other outcomes stay visible longer. Drag anywhere on the pill to move it without taking keyboard focus from your text field. The position is saved when you release it and restored after restarting SharpVoice. Placement stays within the nearest monitor’s usable area if your display arrangement changes. Dragging pauses dismissal until release.
 
 ## VS Code conversation panel
 

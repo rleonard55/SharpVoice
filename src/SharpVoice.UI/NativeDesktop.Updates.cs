@@ -10,7 +10,7 @@ public sealed partial class NativeDesktop
     public Action? UpdateDownloadRequested { get; set; }
     public Action? UpdateInstallRequested { get; set; }
     public Action<bool, string>? UpdatePreferencesChanged { get; set; }
-    public bool UpdateRestartBlocked => active || connectionCancellation is not null || localDownloadCancellation is not null
+    public bool UpdateRestartBlocked => active || hudMoving || connectionCancellation is not null || localDownloadCancellation is not null
         || new[] { settingsWindow, toolsWindow, answerWindow, connectedWindow }.Any(window => window != 0 && Win32.IsWindowVisible(window) != 0);
     public void ExitForUpdate() => Win32.PostQuitMessage(0);
     public void QuiesceForUpdate()

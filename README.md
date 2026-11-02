@@ -50,7 +50,7 @@ The [default cleanup prompt](Data/MasterPrompt.txt) is built into the app. **Pro
   </tr>
 </table>
 
-Settings follow Windows light/dark mode. Help stays behind the **ⓘ** controls, and the live pill shows provisional words while you speak.
+Settings follow Windows light/dark mode. Help stays behind the **ⓘ** controls, and the live pill shows provisional words while you speak. Drag the pill to move it; its position is remembered.
 
 - **Choose your AI:** ChatGPT account sign-in, Claude through Claude Code, Gemini through Antigravity or an AI Studio API key, or local Qwen models. [Provider setup →](docs/user-guide.md#ai-refinement)
 - **Keep a conversation going:** recent Ask AI threads stay in app memory until exit. Reply by voice or type a follow-up.

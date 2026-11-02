@@ -44,6 +44,7 @@ public sealed partial class NativeDesktop : IDisposable
     public Action? CancelRequested { get; set; }
     public Action<bool>? PauseChanged { get; set; }
     public Action<AppConfig>? ConfigChanged { get; set; }
+    public Action<PillPosition>? PillPositionChanged { get; set; }
     public Action? SignInRequested { get; set; }
     public Action? SignOutRequested { get; set; }
     public Action<bool>? GoogleAccountRequested { get; set; }
@@ -75,9 +76,10 @@ public sealed partial class NativeDesktop : IDisposable
         messageWindow = Create(0, "SharpVoice.Native", "SharpVoice", 0, 0, 0, 0, 0, 0, 0);
         Win32.SystemParametersInfoW(0x30, 0, out var area, 0);
         settingsWindow = Create(0, "SharpVoice.Native", "SharpVoice · Settings", 0x00CA0000, Math.Max(area.Left, (area.Right - 740) / 2), Math.Max(area.Top, (area.Bottom - 800) / 2), 740, 800, 0, 0);
-        // WS_EX_LAYERED | TRANSPARENT | TOPMOST | TOOLWINDOW | NOACTIVATE.
-        hudWindow = Create(0x080800A8, "SharpVoice.Native", "SharpVoice HUD", 0x80000000, (area.Right + area.Left - 520) / 2, area.Bottom - 136, 520, 96, 0, 0);
-        Win32.SetLayeredWindowAttributes(hudWindow, 0, 250, 2);
+        var pill = ResolvePillPosition(config.PillPosition ?? new((area.Right + area.Left - PillLayout.Width) / 2, area.Bottom - 136));
+        // WS_EX_LAYERED | TOPMOST | TOOLWINDOW | NOACTIVATE; the pill accepts dragging.
+        hudWindow = Create(0x08080088, "SharpVoice.Native", "SharpVoice HUD", 0x80000000, pill.X, pill.Y, PillLayout.Width, PillLayout.Height, 0, 0);
+        Win32.SetLayeredWindowAttributes(hudWindow, 0, PillLayout.Opacity, 2);
         ApplyPillRegion();
         BuildSettings();
         if (integrateShell) InstallTray();
@@ -130,6 +132,7 @@ public sealed partial class NativeDesktop : IDisposable
         status = text;
         if (isError)
         {
+            hudPasteCompleted = false;
             var cue = feedback.ReportError();
             if (warningSound) sounds?.Play(cue);
         }
@@ -143,7 +146,12 @@ public sealed partial class NativeDesktop : IDisposable
         Win32.InvalidateRect(hudWindow, 0, 0);
     }
 
-    public void PlayInsertionSuccess() => sounds?.Play(FeedbackCue.InsertionSuccess);
+    public void PlayInsertionSuccess()
+    {
+        sounds?.Play(FeedbackCue.InsertionSuccess);
+        hudPasteCompleted = true;
+        if (!active) ScheduleHudDismissal();
+    }
 
     public void ResetRecordingGesture() => hook?.ResetRecordingGesture();
     public void SetExternalRecording(bool active) => hook?.SetExternalRecording(active);
@@ -181,7 +189,7 @@ public sealed partial class NativeDesktop : IDisposable
 
     public void SetActive(bool value)
     {
-        if (value) { CancelHistoryRetry(); CancelConnectionTest(); HideHelp(); StopInputPreview(); }
+        if (value) { hudPasteCompleted = false; CancelHistoryRetry(); CancelConnectionTest(); HideHelp(); StopInputPreview(); }
         active = value;
         RefreshHistoryRetryControls();
         RefreshConnectionTestControls();
@@ -196,7 +204,7 @@ public sealed partial class NativeDesktop : IDisposable
         else
         {
             Win32.KillTimer(hudWindow, 1);
-            Win32.SetTimer(hudWindow, 2, 2500, 0);
+            ScheduleHudDismissal();
         }
     }
 
@@ -357,10 +365,16 @@ public sealed partial class NativeDesktop : IDisposable
             }
             if (hwnd == self.hudWindow)
             {
+                if (self.HandleHudInteraction(message)) return 0;
+                if (message == 0x84) return 2; // HTCAPTION: native borderless drag.
                 if (message == 0xF) { self.PaintHud(); return 0; }
                 if (message == 0x113)
                 {
-                    if (wParam == 2) { Win32.KillTimer(hwnd, 2); Win32.ShowWindow(hwnd, 0); }
+                    if (wParam == 2)
+                    {
+                        if (!self.active && !self.hudMoving && Environment.TickCount64 >= self.hudDismissAfter)
+                        { Win32.KillTimer(hwnd, 2); Win32.ShowWindow(hwnd, 0); }
+                    }
                     else
                     {
                         var reading = self.ReadLevel?.Invoke() ?? -100;

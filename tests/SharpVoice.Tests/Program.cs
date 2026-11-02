@@ -1001,6 +1001,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Included speech model preserves valid cache priority and repairs corrupt cache", BundledModelChecks.CachePriority),
     ("Missing or corrupt included models retain verified download recovery", BundledModelChecks.Recovery),
     ("Included model resolution respects cancellation", BundledModelChecks.Cancellation),
+    ("Pill placement preserves valid monitors and recovers offscreen coordinates", PillLayoutChecks.Placement),
+    ("Pill position persists without changing other settings or legacy defaults", PillLayoutChecks.Persistence),
     ("Model integrity check rejects changed bytes", async () =>
     {
         var path = Path.Combine(Path.GetTempPath(), $"sharpvoice-model-{Guid.NewGuid():N}");

@@ -6,12 +6,73 @@ namespace SharpVoice.UI;
 
 public sealed partial class NativeDesktop
 {
+    private bool hudMoving, hudPasteCompleted;
+    private long hudDismissAfter;
+
     private void ShowHud()
     {
+        ClampPillToWorkArea();
         // Reassert HWND_TOPMOST on every show; preserve geometry and typing focus.
         // SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW.
         SetWindowPos(hudWindow, -1, 0, 0, 0, 0, 0x53);
+        if (!active) ScheduleHudDismissal();
     }
+
+    private void ScheduleHudDismissal()
+    {
+        Win32.KillTimer(hudWindow, 2);
+        if (!active && !hudMoving)
+        {
+            var delay = hudPasteCompleted ? PillLayout.PastedDismissMs : PillLayout.OtherDismissMs;
+            hudDismissAfter = Environment.TickCount64 + delay;
+            Win32.SetTimer(hudWindow, 2, delay, 0);
+        }
+    }
+
+    private bool HandleHudInteraction(uint message)
+    {
+        if (message == 0x231) { hudMoving = true; Win32.KillTimer(hudWindow, 2); return true; } // WM_ENTERSIZEMOVE
+        if (message == 0x232) // WM_EXITSIZEMOVE
+        {
+            if (!hudMoving) return true;
+            hudMoving = false;
+            ClampPillToWorkArea();
+            Win32.GetWindowRect(hudWindow, out var rect);
+            var position = new PillPosition(rect.Left, rect.Top);
+            if (config.PillPosition != position)
+            {
+                try { PillPositionChanged?.Invoke(position); config = config with { PillPosition = position }; }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                { hudPasteCompleted = false; SetStatus("Pill position could not be saved. Move it again to retry.", isError: true); }
+            }
+            ScheduleHudDismissal();
+            return true;
+        }
+        if (message == 0x7E && !hudMoving) { ClampPillToWorkArea(); return true; } // WM_DISPLAYCHANGE
+        return message == 0xA3; // Suppress caption double-click maximize.
+    }
+
+    private unsafe PillPosition ResolvePillPosition(PillPosition position)
+    {
+        var candidate = new Win32.Rect { Left = position.X, Top = position.Y, Right = position.X, Bottom = position.Y };
+        var monitor = MonitorFromRect(&candidate, 2); // MONITOR_DEFAULTTONEAREST
+        var info = new HelpMonitorInfo { Size = (uint)sizeof(HelpMonitorInfo) };
+        Win32.Rect area;
+        if (monitor != 0 && GetMonitorInfoW(monitor, &info) != 0) area = info.Work;
+        else Win32.SystemParametersInfoW(0x30, 0, out area, 0);
+        return PillLayout.Clamp(position, area.Left, area.Top, area.Right, area.Bottom);
+    }
+
+    private void ClampPillToWorkArea()
+    {
+        if (hudMoving) return;
+        Win32.GetWindowRect(hudWindow, out var rect);
+        var position = ResolvePillPosition(new(rect.Left, rect.Top));
+        if (position.X != rect.Left || position.Y != rect.Top)
+            SetWindowPos(hudWindow, -1, position.X, position.Y, 0, 0, 0x11); // NOSIZE | NOACTIVATE
+    }
+
+    [LibraryImport("user32.dll")] private static unsafe partial nint MonitorFromRect(Win32.Rect* rect, uint flags);
 
     private bool editingSelection, cleanupSkipped;
     private string? liveDraft;

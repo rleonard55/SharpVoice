@@ -40,6 +40,7 @@ public sealed record AppConfig
     public string Injection { get; init; } = "clipboard";
     public int PasteDelayMs { get; init; } = 100;
     public int MaxRecordingSeconds { get; init; } = 120;
+    public PillPosition? PillPosition { get; init; }
     public string CustomPrompt { get; init; } = "";
     public string ProsePrompt { get; init; } = "";
     public string EmailPrompt { get; init; } = "";
@@ -65,6 +66,7 @@ public sealed record AppConfig
         && Injection == other.Injection
         && PasteDelayMs == other.PasteDelayMs
         && MaxRecordingSeconds == other.MaxRecordingSeconds
+        && PillPosition == other.PillPosition
         && CustomPrompt == other.CustomPrompt
         && ProsePrompt == other.ProsePrompt
         && EmailPrompt == other.EmailPrompt

@@ -60,7 +60,7 @@ The app and test runner now publish with **zero AOT/trim warnings**, enforced as
 - Flat, transparent microphone tray icons use neutral gray, recording red and warning amber for small-size clarity; larger app/executable icons retain the faceted branding.
 - AI Refinement choices show flat provider icons in both the list and selected field, using monochrome marks matched to the current theme.
 - Settings buttons, fields, dropdowns and sliders provide theme-aware hover feedback, with distinct keyboard focus and disabled states.
-- OS-themed native tray menu with Settings, pause/resume, Copy and Exit, click-through non-activating HUD with audio levels/transcription/refinement previews, and six-tab settings with microphone controls, shortcut recording and per-mode instructions.
+- OS-themed native tray menu with Settings, pause/resume, Copy and Exit, draggable non-activating HUD with remembered placement with audio levels/transcription/refinement previews, and six-tab settings with microphone controls, shortcut recording and per-mode instructions.
 
 ## Prototype limits / next work
 

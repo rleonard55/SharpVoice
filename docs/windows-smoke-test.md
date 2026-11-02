@@ -245,3 +245,10 @@ Automated fixtures use synthetic providers, temporary profiles and a hidden desk
 - With clipboard insertion and a short cleanup-skipped phrase, read the successful elapsed status and ⓘ beside Last Result. Verify the stage breakdown and saved insertion delay. AI-enabled longer dictation includes remote latency; timing stops at insertion dispatch rather than observing the target's rendered frame. No automatic timing, audio or transcript log is created.
 - Test cancellation while a live draft is decoding; later final transcription must remain complete and stale drafts must stay absent. Keep existing foreground/selection checks and VS Code explicit diff approval.
 - Developers can run the test runner with `--turnaround-whisper-benchmark <Tiny-Q5-Model> <Public-11s-JFK-WAV>` to compare alternating Standard/Fast inference and report word differences/cancellation. Those measurements are local inference, not end-to-end paste or AI timings. Do not promise universal sub-second turnaround from them.
+
+
+## Recording Pill Placement
+
+- Focus Notepad, record, and drag anywhere on the pill. Verify it stays above the app without taking typing focus. Continue typing into Notepad after release. The pill should look slightly transparent in both Windows themes.
+- After a successful paste, verify dismissal after about 0.9 seconds. Hold a drag beyond that interval: the pill must remain visible, then dismiss after release. Errors and other outcomes should remain longer.
+- Exit and relaunch SharpVoice: the next recording should show the pill at its saved location. Try another monitor, including one left of the primary display; disconnect that monitor and verify the pill remains accessible. Dragging must not change microphone, model or other preferences.

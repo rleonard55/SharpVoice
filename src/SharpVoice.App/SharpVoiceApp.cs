@@ -81,6 +81,13 @@ internal sealed partial class SharpVoiceApp : IDisposable
             Cancel();
             desktop.SetStatus(paused ? "Microphone paused. Resume from the tray menu." : ReadyText());
         };
+        desktop.PillPositionChanged = position =>
+        {
+            // Layout-only persistence is safe during recording; do not reapply audio/provider settings.
+            var next = this.config with { PillPosition = position };
+            ConfigManager.Save(next);
+            this.config = next;
+        };
         desktop.ConfigChanged = next =>
         {
             if (phase != Phase.Idle || editorSession.Busy) throw new InvalidOperationException("Wait for the current operation to finish before applying settings.");
