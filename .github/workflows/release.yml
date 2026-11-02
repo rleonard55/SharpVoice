@@ -45,6 +45,7 @@ jobs:
             'SHARPVOICE_SKIP_RELEASE=true' >> $env:GITHUB_ENV
             Write-Host 'This version is already published; its assets will not be rebuilt or changed.'
           }
+          exit 0 # A missing release is the expected first-build case.
       - name: Test and build installer, portable package and update feed
         if: env.SHARPVOICE_SKIP_RELEASE != 'true'
         shell: pwsh
