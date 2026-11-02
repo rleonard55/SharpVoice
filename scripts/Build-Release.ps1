@@ -1,5 +1,5 @@
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.1.1',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.1.2',
     [switch]$SkipTests
 )
 $ErrorActionPreference = 'Stop'
@@ -40,6 +40,7 @@ try {
         $null = Run-Tool $dotnet @('build','tests/SharpVoice.Tests/SharpVoice.Tests.csproj','-c','Release','--artifacts-path','.build-cache/windows',"-p:RestorePackagesPath=$packages",'-p:UseSharedCompilation=false','-m:1','--nologo') (Join-Path $work 'tests-build.log')
         $checks = Run-Tool (Join-Path $root '.build-cache/windows/bin/SharpVoice.Tests/release/SharpVoice.Tests.exe') @() (Join-Path $work 'tests.log')
         if ($checks -notmatch '(\d+)/\1 checks passed\.') { throw 'The complete offline suite did not pass.' }
+        $null = Run-Tool (Join-Path $root '.build-cache/windows/bin/SharpVoice.Tests/release/SharpVoice.Tests.exe') @('--windows-hud-window-smoke') (Join-Path $work 'hud-window.log')
     }
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     if (-not (Test-Path $vswhere)) { throw 'Install Visual Studio C++ build tools and the Windows SDK first.' }

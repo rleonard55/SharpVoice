@@ -220,6 +220,7 @@ if (args is ["--windows-help-smoke"]) { WindowsHelpSmoke.Run(); return 0; }
 if (args is ["--windows-help-smoke", var helpOutput]) { WindowsHelpSmoke.Run(helpOutput); return 0; }
 
 if (args is ["--windows-hud-smoke"]) { WindowsHudSmoke.Run(); return 0; }
+if (args is ["--windows-hud-window-smoke"]) { WindowsHudWindowChecks.Run(); return 0; }
 
 if (args is ["--config-smoke", var configPath])
 {

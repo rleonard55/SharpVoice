@@ -139,7 +139,7 @@ public sealed partial class NativeDesktop : IDisposable
         UpdateHelp("Status", StatusHelp());
         RefreshAuthentication();
         UpdateTrayTip();
-        if (showHud) Win32.ShowWindow(hudWindow, 4);
+        if (showHud) ShowHud();
         Win32.InvalidateRect(hudWindow, 0, 0);
     }
 
@@ -191,7 +191,7 @@ public sealed partial class NativeDesktop : IDisposable
         {
             Array.Clear(levels);
             Win32.SetTimer(hudWindow, 1, 40, 0);
-            Win32.ShowWindow(hudWindow, 4);
+            ShowHud();
         }
         else
         {

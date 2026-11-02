@@ -7,7 +7,7 @@
     <AssemblyName>SharpVoice</AssemblyName>
     <ApplicationIcon>../SharpVoice.UI/Assets/microphone-neutral.ico</ApplicationIcon>
     <ApplicationManifest>../SharpVoice.UI/app.manifest</ApplicationManifest>
-    <SharpVoiceVersion Condition="'$(SharpVoiceVersion)' == ''">0.1.1</SharpVoiceVersion>
+    <SharpVoiceVersion Condition="'$(SharpVoiceVersion)' == ''">0.1.2</SharpVoiceVersion>
     <Version>$(SharpVoiceVersion)</Version>
   </PropertyGroup>
   <ItemGroup>

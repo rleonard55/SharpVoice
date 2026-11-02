@@ -6,6 +6,13 @@ namespace SharpVoice.UI;
 
 public sealed partial class NativeDesktop
 {
+    private void ShowHud()
+    {
+        // Reassert HWND_TOPMOST on every show; preserve geometry and typing focus.
+        // SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW.
+        SetWindowPos(hudWindow, -1, 0, 0, 0, 0, 0x53);
+    }
+
     private bool editingSelection, cleanupSkipped;
     private string? liveDraft;
     public void SetLiveDraft(string? text) { liveDraft = text; Win32.InvalidateRect(hudWindow, 0, 0); }
