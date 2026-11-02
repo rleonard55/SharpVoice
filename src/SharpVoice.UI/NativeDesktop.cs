@@ -313,6 +313,7 @@ public sealed partial class NativeDesktop : IDisposable
             {
                 if (lParam == 0x205) self.TrayMenu();
                 else if (lParam == 0x203) self.ShowSettings();
+                else if (lParam == 0x405) { self.ShowSettings(); self.ShowSettingsPage(5); self.OpenUpdates(); }
                 return 0;
             }
             if (self.HandleHelpMessage(hwnd, message, wParam, lParam, out var helpResult)) return helpResult;
@@ -348,6 +349,7 @@ public sealed partial class NativeDesktop : IDisposable
                         case 118: self.OpenPlugins(); break;
                         case 120: self.OpenConnectedSettings(); break;
                         case 121: self.OpenWakePhrases(); break;
+                        case 122: self.OpenUpdates(); break;
                         case 119: self.OpenSmartAsk(); break;
                     }
                     return 0;

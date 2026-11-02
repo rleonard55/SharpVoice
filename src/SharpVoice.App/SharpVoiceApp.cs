@@ -369,6 +369,7 @@ internal sealed partial class SharpVoiceApp : IDisposable
 
     private void Pressed(VoiceMode mode, WakeDetection? wake = null)
     {
+        LastUpdateActivity = Environment.TickCount64;
         if (desktop.IsPaused) return;
         if (phase is Phase.Arming or Phase.Recording)
         {

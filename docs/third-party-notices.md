@@ -1,5 +1,7 @@
 # Third-party inference software
 
+The Windows installer and GitHub update integration use [Velopack 1.2.161](https://github.com/velopack/velopack), under its [MIT license](licenses/Velopack-LICENSE). Release packages include this notice and the license texts. Velopack's updater/installer components retain their upstream notices.
+
 The managed Whisper.net and LLamaSharp bindings are built from [pinned, locally patched upstream sources](../vendor/README.md). Their native runtime versions are unchanged.
 
 SharpVoice embeds the Windows CPU runtimes from Whisper.net.Runtime 1.9.1 and LLamaSharp.Backend.Cpu 0.30.0 for one-file distribution. The executable contains the license notices below as resources; keep these notices when redistributing source or binaries.

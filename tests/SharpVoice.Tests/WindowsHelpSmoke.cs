@@ -29,6 +29,7 @@ internal static partial class WindowsHelpSmoke
 
     private static unsafe void CheckHelp(NativeDesktop desktop, Action<ThemeColors> changeTheme, string? output)
     {
+        CheckUpdates(desktop, changeTheme, output);
         static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
         var window = desktop.SettingsHandle;
         Check(Win32.GetDlgItem(window, 112) != 0, "Settings has no Test Connection action.");

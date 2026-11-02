@@ -127,7 +127,8 @@ public sealed partial class NativeDesktop
         AddChoice("History Storage", "PersistHistory", 390, config.PersistHistory ? "saved" : "memory", 1029);
         Button("Plugins", 118, 40, 452, 285);
         Button("Smart Ask AI", 119, 350, 452, 285);
-        Button("Connected Ask AI", 120, 40, 492, 595);
+        Button("Connected Ask AI", 120, 40, 492, 285);
+        Button("Updates", 122, 350, 492, 285);
 
         buildingPage = -1;
         Control("STATIC", "LAST RESULT", 0, 32, 550, 605, 22);

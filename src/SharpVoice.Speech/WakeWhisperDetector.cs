@@ -30,6 +30,7 @@ public sealed class WakeWhisperDetector : IAsyncDisposable
     public event Action<WakeDetection>? Detected;
     public event Action<Exception>? Failed;
     public WakeSpeechActivity? Activity => Volatile.Read(ref activity);
+    public bool IsRecognizing { get { lock (gate) return inference is not null; } }
     public WakeDetectorDiagnostics? Diagnostics
     {
         get { lock (gate) return diagnostics ? new(enqueued, processed, dropped, resets, queued, lastMs, longestMs,

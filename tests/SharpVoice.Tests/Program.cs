@@ -14,6 +14,7 @@ using SharpVoice.UI;
 
 if (args is ["--turnaround-whisper-benchmark", var turnaroundModel, var turnaroundWav]) { await TurnaroundChecks.Benchmark(turnaroundModel, turnaroundWav); return 0; }
 if (args is ["--turnaround-config-check"]) { await TurnaroundChecks.Preferences(); return 0; }
+if (args is ["--updates-check"]) { await ReleaseUpdateChecks.Preferences(); await ReleaseUpdateChecks.Policy(); await ReleaseUpdateChecks.Cancellation(); return 0; }
 if (args is ["--gemini-api-config-check"]) { await GeminiApiChecks.Configuration(); return 0; }
 if (args is ["--wake-native", var wakeModel, var wakeWav, var wakeDictate, var wakeAsk]) { await WakeDetectorChecks.Native(wakeModel, wakeWav, wakeDictate, wakeAsk); return 0; }
 if (args is ["--whisper-wake-clips", var vadPath, var selectedWhisper, var clipsDirectory]) { await WakeWhisperChecks.NativeClips(vadPath, selectedWhisper, clipsDirectory); return 0; }
@@ -821,6 +822,11 @@ var tests = new (string Name, Func<Task> Run)[]
     }),
     ("Known creation tools require review despite contradictory read-only hints", ConnectedChecks.Hints),
     ("ChatGPT low reasoning is limited to compatible ordinary cleanup requests", CleanupReasoningChecks.Routing),
+    ("Automatic update enablement and action are separate persistent preferences", ReleaseUpdateChecks.Preferences),
+    ("Release updates obey notify, download, install and manual restart policy", ReleaseUpdateChecks.Policy),
+    ("Disabling automatic updates cancels owned work without restarting", ReleaseUpdateChecks.Cancellation),
+    ("Wake speech and prefix recognition block update restart before activation", ReleaseUpdateChecks.WakeEligibility),
+    ("Installed sign-in startup resolves the stable launcher across updates", ReleaseUpdateChecks.StableStartup),
     ("Fast transcription preferences survive save and reload", TurnaroundChecks.Preferences),
     ("Fast transcription keeps full input, padding and long-recording context", TurnaroundChecks.DecodeBounds),
     ("Google AI Studio is a distinct valid refinement provider", GeminiApiChecks.Configuration),

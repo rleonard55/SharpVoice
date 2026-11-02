@@ -1,0 +1,73 @@
+name: Build Draft Windows Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version (for example 0.1.0)
+        required: true
+        default: 0.1.0
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Resolve version
+        shell: pwsh
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          $version = if ($env:REQUESTED_VERSION) { $env:REQUESTED_VERSION } else { $env:GITHUB_REF_NAME -replace '^v','' }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Use a stable x.y.z version.' }
+          "SHARPVOICE_VERSION=$version" >> $env:GITHUB_ENV
+      - name: Preserve already published releases
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $existing = gh release view "v$env:SHARPVOICE_VERSION" --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0 -and -not ($existing | ConvertFrom-Json).isDraft) {
+            'SHARPVOICE_SKIP_RELEASE=true' >> $env:GITHUB_ENV
+            Write-Host 'This version is already published; its assets will not be rebuilt or changed.'
+          }
+      - name: Test and build installer, portable package and update feed
+        if: env.SHARPVOICE_SKIP_RELEASE != 'true'
+        shell: pwsh
+        run: ./scripts/Build-Release.ps1 -Version $env:SHARPVOICE_VERSION
+      - name: Test isolated installer and upgrade lifecycle
+        if: env.SHARPVOICE_SKIP_RELEASE != 'true'
+        shell: pwsh
+        run: ./scripts/Test-ReleaseLifecycle.ps1 -ReleaseDirectory "artifacts/releases/$env:SHARPVOICE_VERSION"
+      - name: Upload assets to a draft release
+        if: env.SHARPVOICE_SKIP_RELEASE != 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v$env:SHARPVOICE_VERSION"
+          $repo = $env:GITHUB_REPOSITORY
+          $existing = gh release view $tag --repo $repo --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if (-not ($existing | ConvertFrom-Json).isDraft) { throw 'Refusing to overwrite a published release.' }
+          } else {
+            gh release create $tag --repo $repo --target $env:GITHUB_SHA --draft --title "SharpVoice $env:SHARPVOICE_VERSION" --notes-file "docs/releases/$tag.md"
+            if ($LASTEXITCODE -ne 0) { throw 'Draft release creation failed.' }
+          }
+          $assets = @(Get-ChildItem "artifacts/releases/$env:SHARPVOICE_VERSION" -File | ForEach-Object FullName)
+          gh release upload $tag @assets --repo $repo --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Draft release asset upload failed.' }

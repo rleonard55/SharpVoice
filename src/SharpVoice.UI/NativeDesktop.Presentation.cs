@@ -100,6 +100,12 @@ public sealed partial class NativeDesktop
         118 => "\uE774", // Plugins
         119 => "\uE8F2", // Spoken answers
         121 => "\uE720", // Wake microphone
+        122 => "\uE895", // Updates
+        4701 => "\uE73E",
+        4702 => "\uE72C",
+        4703 => "\uE896",
+        4704 => "\uE72C",
+        4705 => "\uE946",
         4481 => "\uE73E",
         4482 => "\uE72C",
         4483 => "\uE711",

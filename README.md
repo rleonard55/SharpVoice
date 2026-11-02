@@ -1,5 +1,7 @@
 # SharpVoice prototype
 
+Installer and portable packages are documented in [Building and Publishing](docs/releasing.md). Installed releases can update from GitHub: **General → Updates** separates **Automatic Updates** from **When an Update Is Found** (Notify Only, Download Automatically, Install When Idle). Defaults are On and Install When Idle; manual controls remain available. Automatic installation waits for a quiet interval and closed review/settings windows. Restart clears memory-only conversations. The public updater cannot see private repositories or draft releases and contains no GitHub token.
+
 A native C# Windows 10/11 x64 push-to-talk app built from [Data/Spec.txt](Data/Spec.txt). This is an end-to-end prototype for evaluating the workflow. Performance figures in the spec remain targets. The AOT build requires an **x86-64-v3 CPU (including AVX2/FMA)**, matching Whisper's accelerated runtime.
 
 ## Run on Windows

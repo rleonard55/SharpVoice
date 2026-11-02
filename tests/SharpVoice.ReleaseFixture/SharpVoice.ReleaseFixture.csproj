@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AssemblyName>SharpVoice.ReleaseFixture</AssemblyName>
+    <ReleaseFixtureVersion Condition="'$(ReleaseFixtureVersion)' == ''">0.1.0</ReleaseFixtureVersion>
+    <Version>$(ReleaseFixtureVersion)</Version>
+  </PropertyGroup>
+  <ItemGroup><PackageReference Include="Velopack" Version="1.2.161" /></ItemGroup>
+</Project>

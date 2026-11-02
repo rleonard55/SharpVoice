@@ -7,9 +7,30 @@ public sealed class WindowsLoginStartup
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private readonly string executable, keyPath, valueName;
-    public WindowsLoginStartup() : this(Environment.ProcessPath ?? "", RunKey, "SharpVoice") { }
+    public WindowsLoginStartup() : this(StableLauncher(Environment.ProcessPath ?? ""), RunKey, "SharpVoice") { }
     internal WindowsLoginStartup(string executable, string keyPath, string valueName)
         => (this.executable, this.keyPath, this.valueName) = (executable, keyPath, valueName);
+
+    internal static string StableLauncher(string executable)
+    {
+        var current = Path.GetDirectoryName(executable);
+        if (current is null || !Path.GetFileName(current).Equals("current", StringComparison.OrdinalIgnoreCase)) return executable;
+        var root = Path.GetDirectoryName(current);
+        if (root is null) return executable;
+        var launcher = Path.Combine(root, Path.GetFileName(executable));
+        return File.Exists(Path.Combine(current, "sq.version")) && File.Exists(Path.Combine(root, "Update.exe")) && File.Exists(launcher) ? launcher : executable;
+    }
+
+    public static void RemoveOwnedRegistration(string executable)
+    {
+        if (!OperatingSystem.IsWindows() || !Path.IsPathFullyQualified(executable)) return;
+        var current = Path.GetDirectoryName(executable);
+        if (current is null || !File.Exists(Path.Combine(current, "sq.version"))) return;
+        var stable = StableLauncher(executable);
+        using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+        var value = key?.GetValue("SharpVoice") as string;
+        if (value == CommandFor(executable) || value == CommandFor(stable)) key?.DeleteValue("SharpVoice", throwOnMissingValue: false);
+    }
 
     internal static string CommandFor(string executable)
     {

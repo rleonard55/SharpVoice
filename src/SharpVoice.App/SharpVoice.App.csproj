@@ -7,8 +7,11 @@
     <AssemblyName>SharpVoice</AssemblyName>
     <ApplicationIcon>../SharpVoice.UI/Assets/microphone-neutral.ico</ApplicationIcon>
     <ApplicationManifest>../SharpVoice.UI/app.manifest</ApplicationManifest>
+    <SharpVoiceVersion Condition="'$(SharpVoiceVersion)' == ''">0.1.0</SharpVoiceVersion>
+    <Version>$(SharpVoiceVersion)</Version>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.161" />
     <InternalsVisibleTo Include="SharpVoice.Tests" />
     <ProjectReference Include="../SharpVoice.Audio/SharpVoice.Audio.csproj" />
     <ProjectReference Include="../SharpVoice.Speech/SharpVoice.Speech.csproj" />

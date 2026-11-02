@@ -234,6 +234,11 @@ public sealed partial class NativeDesktop
                 case 4477: if (toolsKind == "connected") ToggleUnavailableConnectedTools(); break;
                 case 4475: if (toolsKind == "connected") ConnectedAccount(); break;
                 case 4451: if (toolsKind == "smartask") SaveSmartAsk(); break;
+                case 4701: if (toolsKind == "updates") SaveUpdates(); break;
+                case 4702: if (toolsKind == "updates") UpdateCheckRequested?.Invoke(); break;
+                case 4703: if (toolsKind == "updates") UpdateDownloadRequested?.Invoke(); break;
+                case 4704: if (toolsKind == "updates") UpdateInstallRequested?.Invoke(); break;
+                case 4705: if (toolsKind == "updates") ToggleUpdateDetails(); break;
                 case 4481: if (toolsKind == "wake") SaveWakePhrases(); break;
                 case 4482: if (toolsKind == "wake") WakePreparationRetryRequested?.Invoke(); break;
                 case 4483: if (toolsKind == "wake") WakePreparationCancelRequested?.Invoke(); break;

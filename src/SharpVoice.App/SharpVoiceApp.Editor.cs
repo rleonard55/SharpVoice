@@ -42,6 +42,7 @@ internal sealed partial class SharpVoiceApp
             try
             {
                 ct.ThrowIfCancellationRequested(); lifetime.Token.ThrowIfCancellationRequested();
+                LastUpdateActivity = Environment.TickCount64;
                 if (frame.Type.StartsWith("workspace_", StringComparison.Ordinal)) { HandleWorkspace(frame); completion.TrySetResult(new("ack", frame.Id)); return; }
                 if (frame.Type == "start")
                 {

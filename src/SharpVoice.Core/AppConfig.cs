@@ -35,6 +35,8 @@ public sealed record AppConfig
     public int MinimumAiWords { get; init; } = 8;
     public string Mode { get; init; } = "auto";
     public bool StartOnLogin { get; init; }
+    public bool AutomaticUpdates { get; init; } = true;
+    public string UpdateAction { get; init; } = "install";
     public string Injection { get; init; } = "clipboard";
     public int PasteDelayMs { get; init; } = 100;
     public int MaxRecordingSeconds { get; init; } = 120;
@@ -59,6 +61,7 @@ public sealed record AppConfig
         && MinimumAiWords == other.MinimumAiWords
         && Mode == other.Mode
         && StartOnLogin == other.StartOnLogin
+        && AutomaticUpdates == other.AutomaticUpdates && UpdateAction == other.UpdateAction
         && Injection == other.Injection
         && PasteDelayMs == other.PasteDelayMs
         && MaxRecordingSeconds == other.MaxRecordingSeconds
@@ -79,6 +82,7 @@ public sealed record AppConfig
 
     public void Validate()
     {
+        if (UpdateAction is not ("notify" or "download" or "install")) throw new ArgumentException("Choose a supported automatic update action.");
         WritingTools.Validate(this);
         WakePhrases.Validate(this);
         if (ConnectedCodexPath is null || ConnectedCodexPath.Length > 4096 || ConnectedTools is null || ConnectedTools.Length > MaximumConnectedTools || ConnectedTools.Any(x => x is null || x.Length > 512 || !x.Contains("::", StringComparison.Ordinal)) || ConnectedTools.Distinct(StringComparer.Ordinal).Count() != ConnectedTools.Length) throw new ArgumentException($"Choose at most {MaximumConnectedTools} distinct connected tools and a valid Codex location.");
@@ -145,6 +149,8 @@ public static class ConfigManager
             AnswerVoice = string.IsNullOrWhiteSpace(config.AnswerVoice) ? "en-US-AriaNeural" : config.AnswerVoice,
             RecordingGesture = document.RootElement.TryGetProperty("recording_gesture", out _) ? config.RecordingGesture : "hold",
             LiveTranscription = document.RootElement.TryGetProperty("live_transcription", out _) ? config.LiveTranscription : true,
+            AutomaticUpdates = document.RootElement.TryGetProperty("automatic_updates", out _) ? config.AutomaticUpdates : true,
+            UpdateAction = document.RootElement.TryGetProperty("update_action", out _) ? config.UpdateAction : "install",
             Backend = hasBackend ? config.Backend : "none",
             AskHotkey = hasAskHotkey ? config.AskHotkey : defaultAskHotkey,
             MinimumAiWords = hasMinimumAiWords ? config.MinimumAiWords : 8,
