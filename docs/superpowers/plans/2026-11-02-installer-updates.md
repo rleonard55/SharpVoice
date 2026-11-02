@@ -24,10 +24,10 @@
 - [x] 2. Integrate Velopack bootstrap, fixed GitHub source, shutdown/restart lifecycle and startup registration ownership. Verify AOT compatibility and lifecycle hooks without microphone/account access.
 - [x] 3. Add Updates under General with separate controls, status/progress and manual actions. Verify both themes and saving controls on an isolated desktop.
 - [x] 4. Add pinned packaging/tool configuration, sanitized native release script, checksum/package audits, third-party notices and draft-release workflow.
-- [ ] 5. Build 0.1.0 installer/portable/feed, run full checks and isolated real lifecycle/update tests, review changes and repeat privacy scans. Commit/push verified source and prepare a private draft release if possible. Document artifacts and any remaining clean-machine/signing limitations.
+- [x] 5. Build 0.1.0 installer/portable/feed, run full checks and isolated real lifecycle/update tests, review changes and repeat privacy scans. Commit/push verified source and prepare a private draft release if possible. Document artifacts and any remaining clean-machine/signing limitations.
 
 
-Implementation and local verification: 175/175 offline checks; complete isolated Settings regression in both themes; actual random-identity Native AOT install, corrupt update rejection, upgrade/restart, downgrade prevention and uninstall; actual portable metadata; sanitized native packaging and asset string scans all passed. Final source push, GitHub workflow and private draft verification are the remaining publication steps.
+Implementation and local verification: 175/175 offline checks; complete isolated Settings regression in both themes; actual random-identity Native AOT install, corrupt update rejection, upgrade/restart, downgrade prevention and uninstall; actual portable metadata; sanitized native packaging and asset string scans all passed. Source pushed; GitHub Actions run 41452527628 passed build/tests, isolated lifecycle and draft upload from commit 1be5fd222adebfacbe3f688ce7ba905312c563f6. Verified draft v0.1.0 has all seven assets and matching published asset digests/checksum manifest. Repository remains private and release remains a draft. Public delivery and clean-machine/signing checks remain as documented release limitations.
 
 Ruling: Disable both native debug generation and SDK symbol copying — the SDK copied a cached old PDB even after debug generation was disabled. Keep the package whitelist and path scans as independent guards.
 
