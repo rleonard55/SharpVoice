@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup><InternalsVisibleTo Include="SharpVoice.Tests" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../SharpVoice.Platform.Windows/SharpVoice.Platform.Windows.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../SharpVoice.Audio/SharpVoice.Audio.csproj" /></ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets/*.ico" LogicalName="SharpVoice.UI.Assets.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Assets/*.wav" LogicalName="SharpVoice.UI.Assets.%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

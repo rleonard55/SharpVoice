@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup><InternalsVisibleTo Include="SharpVoice.Tests" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../SharpVoice.Core/SharpVoice.Core.csproj" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="Assets/sharpvoice-vscode.vsix" LogicalName="SharpVoice.EditorPlugin.vsix" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="Assets/edge-speech.zip" LogicalName="SharpVoice.EdgeSpeech.zip" /></ItemGroup>
+</Project>

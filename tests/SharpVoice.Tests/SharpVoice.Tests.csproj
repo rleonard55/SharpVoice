@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><ApplicationManifest>../../src/SharpVoice.UI/app.manifest</ApplicationManifest></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/SharpVoice.Diagnostics/SharpVoice.Diagnostics.csproj" />
+    <ProjectReference Include="../../src/SharpVoice.App/SharpVoice.App.csproj" />
+    <ProjectReference Include="../../src/SharpVoice.Audio/SharpVoice.Audio.csproj" />
+    <ProjectReference Include="../../src/SharpVoice.Refiner/SharpVoice.Refiner.csproj" />
+    <ProjectReference Include="../../src/SharpVoice.Speech/SharpVoice.Speech.csproj" />
+    <ProjectReference Include="../../src/SharpVoice.Platform.Windows/SharpVoice.Platform.Windows.csproj" />
+    <ProjectReference Include="../../src/SharpVoice.UI/SharpVoice.UI.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../Data/MasterPrompt.txt" Link="Fixtures/MasterPrompt.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures/Wake/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

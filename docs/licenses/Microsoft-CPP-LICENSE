@@ -1,0 +1,11 @@
+Microsoft Visual C++ runtime and OpenMP components
+Copyright Microsoft Corporation. All rights reserved.
+
+These components are designated redistributable binaries from Visual Studio's
+VC/Redist directory. They are not covered by the MIT licenses of Whisper.net,
+whisper.cpp, LLamaSharp or llama.cpp. Distribution and use are subject to the
+applicable Microsoft Visual Studio license terms:
+https://visualstudio.microsoft.com/license-terms/
+
+Redistribution guidance and the Visual Studio REDIST list:
+https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files?view=msvc-170

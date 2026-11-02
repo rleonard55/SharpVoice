@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <EmbeddedResource Include="../../Data/MasterPrompt.txt" LogicalName="SharpVoice.MasterPrompt.txt" />
+  </ItemGroup>
+</Project>

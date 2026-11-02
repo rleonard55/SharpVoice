@@ -1,0 +1,200 @@
+SharpVoice: Technical Specification & Architecture Document
+
+Ultra-Lightweight, Native AOT Speech-to-Text & AI Refinement System for Windows
+
+1. Executive Summary & Objectives
+
+SharpVoice is a complete, native C# rewrite of the ClearVoice voice-dictation and AI-refinement engine. Built atop .NET 10 with Native AOT (Ahead-of-Time compilation), SharpVoice eliminates the Python interpreter, GIL lock, dynamic runtime DLL bloat, and PyInstaller overhead.
+
+Key Performance Targets
+Metric	Target in SharpVoice (.NET 10 Native AOT)	Legacy ClearVoice (Python 3.11)	Improvement
+Idle Memory (Background)	18 MB – 25 MB Working Set	60 MB – 140 MB	~75% RAM Reduction
+Idle CPU Usage	0.00% (Event-driven sleep)	0.05% – 0.20%	True Zero Background CPU
+Dictation Cold Latency	< 350 ms turnaround	600 ms – 1200 ms	2x Faster Processing
+Binary Footprint	~25 MB single standalone .exe	115 MB PyInstaller bundle	78% Smaller Executable
+Process Startup Time	< 40 ms instant boot	1.8s – 2.5s	40x Faster Launch
+External Dependencies	Zero (no .NET runtime or Python needed)	Python DLLs, Tkinter, PyInstaller bootloader	Fully standalone portable executable
+2. High-Level System Architecture
+3. Module Specifications
+Module 1: SharpVoice.Audio (WASAPI Capture & Buffering)
+Role: High-efficiency, zero-copy audio stream capture directly from the default Windows microphone.
+Engine: Direct Windows WASAPI (via Windows.Win32.Media.Audio or lightweight NAudio.Wasapi).
+Specifications:
+Sample Rate: Standard 16,000 Hz, 1-channel mono, 32-bit float or 16-bit PCM.
+Latency: 10ms hardware buffer packets.
+Pre-Roll Ring Buffer: 250ms circular memory buffer (ArrayPool<byte>) to catch speech onsets.
+Hardware Drain Buffer: Exactly 50ms post-roll hardware drain on hotkey release to ensure PortAudio/WASAPI DMA trailing frames are captured without clipping.
+Signal Pre-Processing:
+Real-time RMS decibel energy calculation.
+Software Noise Gate (threshold configurable: default -42 dB).
+Lightweight spectral gate or high-pass filter (80Hz cutoff).
+Module 2: SharpVoice.Speech (Whisper Transcription)
+Role: Fast, on-device Whisper speech-to-text inference.
+Engine: Whisper.net (direct P/Invoke to optimized native whisper.cpp with AVX2 / FMA / OpenMP acceleration).
+Features:
+Quantized GGML model support (ggml-tiny.en.bin, ggml-base.en.bin, ggml-small.en.bin).
+Automatic background download and integrity verification (SHA-256) on first run.
+Memory Watchdog (Deep Sleep):
+Unloads Whisper model context after 10 minutes of user inactivity, reclaiming ~45MB of RAM.
+Auto-reloads in < 150ms on first hotkey press.
+Module 3: SharpVoice.Auth (ChatGPT OAuth 2.0 PKCE Flow)
+Role: Zero-cost model inference using the user's personal ChatGPT Plus / Team / Pro subscription without requiring an OpenAI developer API key.
+OAuth Specification:
+Client ID: app_EMoamEEZ73f0CkXaXp7hrann
+Scopes: openid profile email offline_access (excluding model.request to prevent scope rejection).
+PKCE: S256 challenge via SHA256.HashData() and Base64Url.Encode().
+Loopback Server: Native HttpListener listening on http://localhost:1455/auth/callback/ with 3-minute timeout and automatic socket disposal.
+Token Storage: JSON session saved to %USERPROFILE%/.sharpvoice/session.json, encrypted via Windows Data Protection API (ProtectedData.Protect using DataProtectionScope.CurrentUser).
+Automatic Refresh: Background timer checks expiration; auto-refreshes tokens 5 minutes prior to expiry.
+Module 4: SharpVoice.Refiner (AI Inference & Streaming)
+Role: Format raw spoken transcripts into polished prose, emails, code, or context-aware edits.
+Backends Supported:
+ChatGPT Subscription (chatgpt_oauth):
+Target: https://chatgpt.com/backend-api/codex/responses
+Transport: SocketsHttpHandler with EnableMultipleHttp2Connections = true and persistent HTTP/2 connection pooling.
+Parser: Native UTF-8 SSE (Server-Sent Events) streaming parser.
+Supported Models: gpt-5.1-codex (recommended), gpt-4o-mini, gpt-4o.
+Groq Cloud API (groq):
+Target: https://api.groq.com/openai/v1/chat/completions (Llama-3.3-70b-versatile).
+OpenAI Platform API (openai):
+Target: https://api.openai.com/v1/chat/completions.
+Embedded Local LLM (embedded):
+Optional lightweight on-device inference via LlamaSharp running Qwen2.5-0.5B-Instruct-Q4_K_M.gguf.
+Module 5: SharpVoice.Platform.Windows (Hooks & Injection)
+Role: Native OS integration with zero runtime overhead.
+P/Invoke Implementations (Source-Generated [LibraryImport]):
+Global Hotkeys: SetWindowsHookExW (WH_KEYBOARD_LL) with standard Windows message pump (GetMessage / DispatchMessage).
+Window Detection: GetForegroundWindow, GetWindowThreadProcessId, QueryFullProcessImageNameW, and window title inspection for context-aware mode routing (Outlook 
+→
+→ Email, VS Code 
+→
+→ Code, Slack 
+→
+→ Casual).
+Text Injection:
+Primary: SendInput synthesizing UTF-16 Unicode keystrokes (KEYEVENTF_UNICODE).
+Fallback: Clipboard paste (Ctrl+V) with Windows Clipboard History bypass (CanIncludeInClipboardHistory = 0 and ExcludeClipboardContentFromMonitorProcessing = 1).
+Memory Trimming: Immediate post-paste call to K32EmptyWorkingSet(GetCurrentProcess()) and GC.Collect(2, GCCollectionMode.Aggressive, blocking: false) to keep working set under 20MB.
+Module 6: SharpVoice.UI (HUD & Settings)
+Role: Desktop UI surfaces built for Windows 10/11 design standards.
+Components:
+Floating Desktop HUD:
+Borderless, click-through, always-on-top layered window (WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW).
+Rendered via Direct2D / Windows Composition (or lightweight WPF Acrylic).
+Displays live audio waveform visualizer and streaming transcription preview.
+System Tray Integration:
+Native Shell_NotifyIconW tray icon.
+Context menu: Quick Model Switcher, Open Settings, Pause/Resume, Exit.
+Settings & Preferences GUI:
+Modern dark-themed window with multi-tab layout:
+Audio: Microphone device selector, noise gate slider, volume levels.
+AI & Models: Backend engine picker, ChatGPT OAuth login/logout, model dropdown.
+Prompts & Modes: Custom mode prompt templates.
+Hotkeys: Interactive key combination recorder.
+Injection: Paste delay, typing vs. clipboard paste selection.
+4. Native AOT & Zero-Reflection Design
+
+To compile cleanly with <PublishAot>true</PublishAot>, SharpVoice adheres to strict AOT guidelines:
+
+Source-Generated JSON Serialization:
+
+No runtime reflection. All configuration, OAuth tokens, and API requests use [JsonSerializable] source generators:
+csharp
+[JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower)]
+[JsonSerializable(typeof(AppConfig))]
+[JsonSerializable(typeof(ChatGptSession))]
+[JsonSerializable(typeof(CodexResponsesPayload))]
+internal partial class SharpVoiceJsonContext : JsonSerializerContext { }
+
+Source-Generated Win32 P/Invoke:
+
+Using [LibraryImport("user32.dll")] instead of legacy [DllImport], generating direct native assembly call stubs at compile time.
+
+Trim-Safe Dependency Stack:
+
+Whisper.net (Native C++ core with pure P/Invoke).
+Direct BCL System.Net.Http (Native AOT compliant HTTP/2 stack).
+Minimalist Win32 / Direct2D or lightweight Native AOT-compatible UI framework.
+5. Proposed Project Structure
+text
+sharpvoice/
+├── SharpVoice.sln
+├── src/
+│   ├── SharpVoice.App/                       # Main entry point & application orchestrator
+│   │   ├── Program.cs                        # Main() entry & single-instance mutex
+│   │   ├── SharpVoiceApp.cs                  # Pipeline coordinator (Audio -> Whisper -> AI -> Inject)
+│   │   └── SharpVoice.App.csproj             # <PublishAot>true</PublishAot>
+│   │
+│   ├── SharpVoice.Core/                      # Domain models, config, and interfaces
+│   │   ├── Config/
+│   │   │   ├── AppConfig.cs                  # Strongly typed configuration
+│   │   │   └── ConfigManager.cs              # JSON persistence with DPAPI encryption
+│   │   ├── Serialization/
+│   │   │   └── SharpVoiceJsonContext.cs      # Compile-time AOT JSON serializer
+│   │   └── Diagnostics/
+│   │       └── MemoryTrimmer.cs              # Working set trimmer & GC coordinator
+│   │
+│   ├── SharpVoice.Audio/                     # Audio capture & DSP
+│   │   ├── WasapiAudioRecorder.cs            # Low-latency WASAPI microphone stream
+│   │   ├── AudioBufferRing.cs                # Lock-free circular pre-roll buffer
+│   │   └── NoiseGate.cs                      # RMS energy computation & threshold gate
+│   │
+│   ├── SharpVoice.Speech/                    # Whisper speech-to-text
+│   │   ├── WhisperEngine.cs                  # Whisper.net wrapper & context pool
+│   │   └── ModelManager.cs                   # GGML model download, cache, & unload
+│   │
+│   ├── SharpVoice.Refiner/                   # AI Refinement & ChatGPT OAuth
+│   │   ├── Auth/
+│   │   │   ├── ChatGptAuthManager.cs         # PKCE S256, token refresh, DPAPI storage
+│   │   │   └── LoopbackServer.cs             # Ephemeral localhost:1455 HTTP listener
+│   │   ├── Clients/
+│   │   │   ├── ChatGptInferenceClient.cs     # HTTP/2 SSE streaming client
+│   │   │   ├── GroqInferenceClient.cs        # Groq Cloud client
+│   │   │   └── UnifiedRefiner.cs             # Dynamic mode & context-aware router
+│   │   └── Prompts/
+│   │       └── PromptTemplates.cs            # Clean prose, email, code, voice edit
+│   │
+│   ├── SharpVoice.Platform.Windows/          # OS-specific hooks & integration
+│   │   ├── Native/
+│   │   │   └── Win32Interop.cs               # [LibraryImport] user32, kernel32, psapi
+│   │   ├── Hooks/
+│   │   │   └── GlobalKeyboardHook.cs         # WH_KEYBOARD_LL low-level hook
+│   │   ├── Injection/
+│   │   │   └── TextInjector.cs               # SendInput Unicode & clipboard history bypass
+│   │   └── AppDetection/
+│   │       └── ActiveWindowDetector.cs       # GetForegroundWindow & process inspect
+│   │
+│   └── SharpVoice.UI/                        # Windows UI presentation
+│       ├── Tray/
+│       │   └── SystemTrayIcon.cs             # Shell_NotifyIconW context menu
+│       ├── Hud/
+│       │   └── FloatingHudOverlay.cs         # Layered transparent Direct2D glass HUD
+│       └── Settings/
+│           └── SettingsWindow.cs             # Dark-themed multi-tab configuration GUI
+│
+└── tests/
+    └── SharpVoice.Tests/                     # Comprehensive unit & integration tests
+        ├── AuthTests.cs
+        ├── AudioTests.cs
+        ├── WhisperTests.cs
+        └── RefinerTests.cs
+6. Implementation Milestones
+Milestone 1 (Scaffold & OS Hooks): Set up .NET 10 solution, Native AOT project configuration, Win32 source-generated P/Invoke interop, and global keyboard hook (WH_KEYBOARD_LL).
+Milestone 2 (Audio & Speech): Implement WASAPI audio capture with 250ms pre-roll, 50ms post-roll drain, RMS noise gating, and Whisper.net integration with automatic model downloader.
+Milestone 3 (ChatGPT Subscription OAuth): Build ChatGptAuthManager (PKCE S256, localhost:1455 loopback, DPAPI token storage) and persistent HTTP/2 SSE streaming client.
+Milestone 4 (Pipeline & Text Injection): Wire end-to-end push-to-talk pipeline (Audio 
+→
+→ Whisper 
+→
+→ ChatGPT 
+→
+→ SendInput), active window detection, and post-paste working set trimming.
+Milestone 5 (Desktop UI & HUD): Implement native system tray icon, floating transparent glass HUD, and multi-tab settings window.
+Milestone 6 (AOT Compilation & Optimization): Compile single-file executable (dotnet publish -c Release), verify AOT trim warnings are zero, and profile RAM consumption in Task Manager to verify < 20MB idle footprint.
+7. Next Steps
+
+To initiate construction of SharpVoice, we can execute Milestone 1:
+
+Create sharpvoice/ solution structure alongside the current project.
+Initialize the project files with <PublishAot>true</PublishAot> and .NET 10 target.
+Implement the Win32 P/Invoke interop layer and global hotkey capture.

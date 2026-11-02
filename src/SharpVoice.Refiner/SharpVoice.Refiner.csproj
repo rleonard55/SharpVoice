@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup><EmbeddedResource Include="Auth/CallbackPage.html" LogicalName="SharpVoice.Auth.CallbackPage.html" /></ItemGroup>
+  <ItemGroup><InternalsVisibleTo Include="SharpVoice.Tests" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../SharpVoice.Core/SharpVoice.Core.csproj" />
+    <ProjectReference Include="../SharpVoice.Platform.Windows/SharpVoice.Platform.Windows.csproj" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../vendor/LLamaSharp/LLamaSharp.csproj" />
+    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.30.0" />
+  </ItemGroup>
+</Project>

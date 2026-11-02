@@ -1,0 +1,22 @@
+title = "SharpVoice Public Source"
+
+[extend]
+useDefault = true
+
+# The generic rule mistakes Token-named source-file checksum entries for API keys.
+# Require BOTH this manifest path and the complete checksum-entry syntax.
+[[allowlists]]
+description = "Upstream source SHA-256 manifest entries"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)vendor/upstream-files\.sha256\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"[^"]+":\s*"[a-f0-9]{64}",?\s*$''']
+
+# Exact public protocol constant from the checksum-verified edge-tts 7.3.1 wheel.
+# This is distributed by upstream; it is not a user's account credential.
+# Do not replace this with a blanket exclusion of the speech bundle or tests.
+[[allowlists]]
+description = "Exact public edge-tts protocol constant"
+targetRules = ["generic-api-key"]
+regexes = ['''^6A5AA1D4EAFF4E9FB37E23D68491D6F4$''']

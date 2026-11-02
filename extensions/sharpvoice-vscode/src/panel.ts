@@ -1,0 +1,23 @@
+import * as vscode from 'vscode';
+import {randomUUID} from 'node:crypto';
+import {Frame} from './model';
+import {parsePanelIntent,PanelIntent,PanelState} from './panelModel';
+export class VoicePanel implements vscode.WebviewViewProvider,vscode.Disposable {
+ private view?:vscode.WebviewView;private readonly state=new PanelState();private disposed=false;
+ constructor(private readonly uri:vscode.Uri,private readonly intent:(action:PanelIntent)=>Promise<void>,private readonly hidden:()=>void,private readonly shown:()=>Promise<void>=async()=>{}){}
+ resolveWebviewView(view:vscode.WebviewView):void {
+  this.view=view;view.webview.options={enableScripts:true,localResourceRoots:[vscode.Uri.joinPath(this.uri,'media')]};
+  const nonce=randomUUID().replace(/-/g,'');const asset=(name:string)=>view.webview.asWebviewUri(vscode.Uri.joinPath(this.uri,'media',name)).toString();
+  view.webview.html=`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${view.webview.cspSource}; style-src ${view.webview.cspSource}; script-src 'nonce-${nonce}'"><link rel="stylesheet" href="${asset('panel.css')}"></head><body><header><img src="${asset('mic.svg')}" alt=""><div><strong>SharpVoice</strong><small id="model">Your voice. Your words.</small></div></header><div class="toolbar"><select id="conversations" aria-label="Recent conversations"></select><button id="new">New</button><button id="delete" title="Delete this conversation">Delete</button><button id="clear" title="Clear all conversations">Clear All</button></div><div class="context"><select id="mode" aria-label="Request mode"><option value="ask">Ask AI</option><option value="dictate">Dictate Code</option><option value="edit">Edit Code</option></select><label><input type="checkbox" id="includeFile">Include Current File</label><button id="move" title="Move SharpVoice to the right sidebar">Dock Right</button></div><p id="status" role="status">Connecting to SharpVoice…</p><small id="scope"></small><main id="turns" aria-label="Conversation"></main><p id="omitted" hidden>Some earlier context was omitted to keep this conversation responsive.</p><aside id="draft" aria-live="polite" hidden></aside><div class="actions"><button id="voice" class="primary">Speak</button><button id="cancel">Cancel</button><button id="review" hidden>Review Changes</button><button id="apply" hidden>Apply</button><button id="copy">Copy Answer</button></div><label class="reply" for="reply">Or Type a Reply</label><textarea id="reply" rows="3" maxlength="4000" placeholder="Ask a question or describe a change…"></textarea><button id="send" class="primary send">Send</button><footer>Conversations stay in memory until SharpVoice exits.</footer><script nonce="${nonce}" src="${asset('panel.js')}"></script></body></html>`;
+  view.webview.onDidReceiveMessage(async value=>{try{if(value?.action==='ready'){this.flush();return;}await this.intent(parsePanelIntent(value));}catch(e){void vscode.window.showErrorMessage(e instanceof Error?e.message:'SharpVoice request failed.');}});
+  view.onDidChangeVisibility(()=>{if(!view.visible)this.hidden();else{this.flush();this.sync();}});
+  view.onDidDispose(()=>{if(this.view===view){this.hidden();this.view=undefined;}});this.flush();this.sync();
+ }
+ private sync():void{void this.shown().catch(e=>this.update({type:'workspace',state:'idle',message:e instanceof Error?e.message:'Start SharpVoice to connect.'}));}
+ get visible():boolean{return this.view?.visible===true;}
+ update(frame:Frame):void {if(!this.disposed&&this.state.accept(frame))this.flush();}
+ private flush():void {if(this.view?.visible){void this.view.webview.postMessage({snapshot:this.state.snapshot,draft:this.state.draft});}}
+ async show():Promise<void>{await vscode.commands.executeCommand('sharpvoice.workspace.focus');}
+ async move():Promise<void>{await this.show();await vscode.commands.executeCommand('workbench.action.moveView',{viewId:'sharpvoice.workspace'});}
+ dispose():void{this.disposed=true;this.view=undefined;}
+}

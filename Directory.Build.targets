@@ -1,0 +1,49 @@
+<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'SharpVoice.App' or '$(MSBuildProjectName)' == 'SharpVoice.Tests' or '$(MSBuildProjectName)' == 'SharpVoice.Diagnostics'">
+    <IlcTreatWarningsAsErrors>true</IlcTreatWarningsAsErrors>
+    <ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+    <!-- Whisper.net 1.9.1 probes managed AVX intrinsics, which fold to false in
+         baseline AOT builds. Match the native CPU runtime's AVX2/FMA baseline.
+         See https://github.com/sandrohanea/whisper.net/issues/538 -->
+    <IlcInstructionSet Condition="'$(IlcInstructionSet)' == ''">x86-64-v3</IlcInstructionSet>
+  </PropertyGroup>
+  <!-- Compress the pinned CPU inference runtimes into each Windows entry assembly.
+       Native AOT cannot use PublishSingleFile's managed bundler. -->
+  <PropertyGroup Condition="'$(OS)' == 'Windows_NT' and ('$(MSBuildProjectName)' == 'SharpVoice.App' or '$(MSBuildProjectName)' == 'SharpVoice.Tests' or '$(MSBuildProjectName)' == 'SharpVoice.Diagnostics')">
+    <BundleNativeRuntime>true</BundleNativeRuntime>
+    <NativeBundleRoot>$(IntermediateOutputPath)native-bundle</NativeBundleRoot>
+    <NativeBundleZip>$(IntermediateOutputPath)SharpVoice.NativeRuntime.zip</NativeBundleZip>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(BundleNativeRuntime)' == 'true'">
+    <EmbeddedResource Include="$(NativeBundleZip)" LogicalName="SharpVoice.NativeRuntime.zip" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)docs/licenses/*-LICENSE" LogicalName="SharpVoice.Licenses.%(Filename)" />
+  </ItemGroup>
+  <Target Name="BundleInferenceRuntime" BeforeTargets="PrepareForBuild" Condition="'$(BundleNativeRuntime)' == 'true'">
+    <ItemGroup>
+      <CrtBundleFile Include="$(VCToolsRedistDir)/x64/Microsoft.VC*.CRT/vcruntime140.dll;$(VCToolsRedistDir)/x64/Microsoft.VC*.CRT/vcruntime140_1.dll;$(VCToolsRedistDir)/x64/Microsoft.VC*.CRT/msvcp140.dll;$(VCToolsRedistDir)/x64/Microsoft.VC*.OpenMP/vcomp140.dll" Condition="'$(VCToolsRedistDir)' != ''" />
+      <WhisperBundleFile Include="$(NuGetPackageRoot)/whisper.net.runtime/1.9.1/build/win-x64/*.dll" />
+      <LlamaBundleFile Include="$(NuGetPackageRoot)/llamasharp.backend.cpu/0.30.0/LLamaSharpRuntimes/win-x64/native/avx2/*.dll" Condition="'$(MSBuildProjectName)' != 'SharpVoice.Diagnostics'" />
+      <WakeBundleFile Include="$(NuGetPackageRoot)/org.k2fsa.sherpa.onnx.runtime.win-x64/1.12.32/runtimes/win-x64/native/*.dll" />
+    </ItemGroup>
+    <Error Condition="'@(WhisperBundleFile)' == '' or ('$(MSBuildProjectName)' != 'SharpVoice.Diagnostics' and '@(LlamaBundleFile)' == '')" Text="Pinned native runtimes are missing. Restore packages before building." />
+    <RemoveDir Directories="$(NativeBundleRoot)" />
+    <MakeDir Directories="$(NativeBundleRoot)/whisper/runtimes/win-x64;$(NativeBundleRoot)/llama;$(NativeBundleRoot)/cpp;$(NativeBundleRoot)/wake" />
+    <Copy SourceFiles="@(WhisperBundleFile)" DestinationFolder="$(NativeBundleRoot)/whisper/runtimes/win-x64" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(LlamaBundleFile)" DestinationFolder="$(NativeBundleRoot)/llama" SkipUnchangedFiles="true" />
+    <Error Condition="'@(WakeBundleFile)' == ''" Text="Pinned wake detector runtime is missing. Restore packages before building." />
+    <Copy SourceFiles="@(WakeBundleFile)" DestinationFolder="$(NativeBundleRoot)/wake" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(CrtBundleFile)" DestinationFolder="$(NativeBundleRoot)/cpp" SkipUnchangedFiles="true" />
+    <ZipDirectory SourceDirectory="$(NativeBundleRoot)" DestinationFile="$(NativeBundleZip)" Overwrite="true" />
+  </Target>
+  <Target Name="EnsurePortableCppRuntime" BeforeTargets="PrepareForPublish" Condition="'$(BundleNativeRuntime)' == 'true' and '$(PublishAot)' == 'true'">
+    <Error Condition="'@(CrtBundleFile->Count())' != '4'" Text="The portable AOT publish needs four x64 Visual C++ redistributable DLLs. Run scripts/Build.ps1 -Aot or use an x64 Visual Studio Developer Command Prompt (VCToolsRedistDir)." />
+  </Target>
+  <Target Name="ExcludeBundledRuntimeCopies" AfterTargets="ComputeFilesToPublish" Condition="'$(BundleNativeRuntime)' == 'true'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.Extension)' == '.dll' and $([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').StartsWith('runtimes'))" />
+    </ItemGroup>
+  </Target>
+</Project>

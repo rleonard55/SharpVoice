@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="PublishAot">
+  <PropertyGroup>
+    <AssemblyName>LLamaSharp</AssemblyName>
+    <!-- The full upstream API has optional reflective serialization features.
+         Do not advertise library-wide AOT compatibility; strict app publish
+         analyzes the actual reachable API subset with warnings as errors. -->
+    <IsAotCompatible>false</IsAotCompatible>
+    <!-- This project produces managed IL, not a native entrypoint. The app/test
+         ILC still analyzes every reachable method from this assembly. -->
+    <PublishAot>false</PublishAot>
+    <RootNamespace>LLama</RootNamespace>
+    <Version>0.30.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Bcl.Memory" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.11.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
+    <PackageReference Include="System.Linq.Async" Version="7.0.1" />
+    <PackageReference Include="System.Numerics.Tensors" Version="10.0.13" />
+  </ItemGroup>
+</Project>

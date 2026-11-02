@@ -1,0 +1,168 @@
+{
+  "name": "sharpvoice-vscode",
+  "displayName": "SharpVoice",
+  "description": "Document-aware voice coding and previewed refactors using the SharpVoice desktop app.",
+  "version": "0.2.0",
+  "publisher": "sharpvoice",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "main": "./out/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": {
+      "supported": false
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "sharpvoice.dictateCode",
+        "title": "SharpVoice: Dictate Code (Start / Stop)",
+        "enablement": "!activeEditorIsReadonly && isWorkspaceTrusted",
+        "icon": "$(mic)"
+      },
+      {
+        "command": "sharpvoice.editCode",
+        "title": "SharpVoice: Edit Code by Voice (Start / Stop)",
+        "enablement": "!activeEditorIsReadonly && isWorkspaceTrusted",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "sharpvoice.stop",
+        "title": "SharpVoice: Stop Recording",
+        "enablement": "sharpvoice.recording",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "sharpvoice.cancel",
+        "title": "SharpVoice: Cancel Voice Edit",
+        "enablement": "sharpvoice.sessionActive",
+        "icon": "$(close)"
+      },
+      {
+        "command": "sharpvoice.apply",
+        "title": "SharpVoice: Apply Voice Edit",
+        "enablement": "sharpvoice.canApply",
+        "icon": "$(check)"
+      },
+      {
+        "command": "sharpvoice.clarify",
+        "title": "SharpVoice: Answer Clarification by Voice",
+        "enablement": "sharpvoice.needsClarification",
+        "icon": "$(mic)"
+      },
+      {
+        "command": "sharpvoice.open",
+        "title": "SharpVoice: Open Conversation Panel",
+        "icon": "$(mic)"
+      },
+      {
+        "command": "sharpvoice.movePanel",
+        "title": "SharpVoice: Move Panel to Right Sidebar",
+        "icon": "$(layout-sidebar-right)"
+      }
+    ],
+    "configuration": {
+      "title": "SharpVoice",
+      "properties": {
+        "sharpvoice.context": {
+          "type": "string",
+          "enum": [
+            "selection",
+            "nearby",
+            "document"
+          ],
+          "default": "nearby",
+          "enumDescriptions": [
+            "Only the selected target.",
+            "Target and nearby code, up to 32,000 characters.",
+            "Current unsaved document if within 32,000 characters."
+          ],
+          "description": "Code shared with your selected SharpVoice AI provider for explicit editor requests. No additional files are read."
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "sharpvoice.cancel",
+        "key": "escape",
+        "when": "sharpvoice.sessionActive"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "sharpvoice.dictateCode",
+          "when": "isWorkspaceTrusted && !activeEditorIsReadonly && (resourceScheme == file || resourceScheme == untitled) && !sharpvoice.sessionActive",
+          "group": "navigation@91"
+        },
+        {
+          "command": "sharpvoice.editCode",
+          "when": "isWorkspaceTrusted && !activeEditorIsReadonly && (resourceScheme == file || resourceScheme == untitled) && !sharpvoice.sessionActive",
+          "group": "navigation@92"
+        },
+        {
+          "command": "sharpvoice.stop",
+          "when": "sharpvoice.recording",
+          "group": "navigation@91"
+        },
+        {
+          "command": "sharpvoice.clarify",
+          "when": "sharpvoice.needsClarification",
+          "group": "navigation@91"
+        },
+        {
+          "command": "sharpvoice.apply",
+          "when": "sharpvoice.canApply",
+          "group": "navigation@91"
+        },
+        {
+          "command": "sharpvoice.cancel",
+          "when": "sharpvoice.sessionActive",
+          "group": "navigation@92"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sharpvoice",
+          "title": "SharpVoice",
+          "icon": "media/mic.svg"
+        }
+      ]
+    },
+    "views": {
+      "sharpvoice": [
+        {
+          "type": "webview",
+          "id": "sharpvoice.workspace",
+          "name": "SharpVoice"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "npm run build && node --test test/*.test.cjs",
+    "package": "npm run build && node scripts/package.cjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@types/node": "22.10.0",
+    "@types/vscode": "1.95.0"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ]
+}

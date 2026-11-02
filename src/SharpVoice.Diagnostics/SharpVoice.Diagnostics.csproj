@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType><RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishAot>true</PublishAot><InvariantGlobalization>true</InvariantGlobalization>
+    <AssemblyName>SharpVoice.Diagnostics</AssemblyName>
+    <ApplicationIcon>../SharpVoice.UI/Assets/microphone-neutral.ico</ApplicationIcon>
+    <ApplicationManifest>../SharpVoice.UI/app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpVoice.Tests" />
+    <ProjectReference Include="../SharpVoice.Audio/SharpVoice.Audio.csproj" />
+    <ProjectReference Include="../SharpVoice.Speech/SharpVoice.Speech.csproj" />
+    <ProjectReference Include="../SharpVoice.Platform.Windows/SharpVoice.Platform.Windows.csproj" />
+  </ItemGroup>
+</Project>
