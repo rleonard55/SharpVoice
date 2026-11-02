@@ -1,5 +1,9 @@
 # Third-party inference software
 
+SharpVoice-owned source code is covered by the repository's [MIT license](../LICENSE). That grant does not replace the separate licenses of vendored code, model weights, runtimes or artwork. Keep their copyright notices and applicable license texts when redistributing them.
+
+The embedded Edge speech helper includes Python, edge-tts (LGPLv3), certifi (MPL-2.0) and other dependencies under their own licenses. Their license files are retained inside the speech archive. See the [speech runtime inventory and source references](../vendor/edge-speech/README.md). Cloud-provider and speech-service access remains subject to the respective service terms.
+
 The Windows installer and GitHub update integration use [Velopack 1.2.161](https://github.com/velopack/velopack), under its [MIT license](licenses/Velopack-LICENSE). Release packages include this notice and the license texts. Velopack's updater/installer components retain their upstream notices.
 
 The managed Whisper.net and LLamaSharp bindings are built from [pinned, locally patched upstream sources](../vendor/README.md). Their native runtime versions are unchanged.

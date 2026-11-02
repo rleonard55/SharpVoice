@@ -70,6 +70,7 @@ try {
     $staging = Join-Path $work 'package'
     New-Item -ItemType Directory -Path $staging,(Join-Path $staging 'licenses') -Force | Out-Null
     Copy-Item -LiteralPath $exe -Destination $staging
+    Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $staging
     Copy-Item -Path (Join-Path $root 'docs/licenses/*-LICENSE') -Destination (Join-Path $staging 'licenses')
     Copy-Item -LiteralPath (Join-Path $root 'docs/third-party-notices.md') -Destination $staging
     $null = Run-Tool $dotnet @('tool','restore','--tool-manifest','.config/dotnet-tools.json') (Join-Path $work 'tool-restore.log')
