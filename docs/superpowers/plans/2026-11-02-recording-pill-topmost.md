@@ -6,8 +6,10 @@ Evidence: HUD creation sets TOPMOST, but both SetActive(true) and SetStatus(show
 
 - [x] Add a native isolated-desktop regression: retain a synthetic text field's focus, lower the HUD, raise a competing topmost window, then show through recording/status/repeat paths. Assert visibility, z-order, styles, geometry, focus and normal dismissal. Observe the old implementation fail.
 - [x] Route both show paths through the helper. Run the native regression, existing HUD rendering check and full offline suite. Add the native check to release validation.
-- [ ] Build/check a model-included patch installer (0.1.2), preserve old published assets, document verification and make the tested patch available through the normal release/update feed.
+- [x] Build/check a model-included patch installer (0.1.2), preserve old published assets, document verification and make the tested patch available through the normal release/update feed.
 
 All native checks run on a separate desktop without installing shell hooks, recording audio, using accounts or touching the running SharpVoice app.
 
 Verification: old implementation failed the TOPMOST assertion. Fixed implementation passed native start/status/repeat stacking, independent editing focus/foreground, click-through/NOACTIVATE styles, geometry and dismissal on an isolated desktop. Direct2D pill rendering passed both themes; full offline suite passed 179/179; build had zero warnings/errors. The first focus fixture accidentally focused its competing window during creation, before showing the pill; reset after fixture creation and a pre-show assertion resolved that test setup issue without extra product changes. Independent read-only review found no actionable issues. CI native package/lifecycle verification and publication remain.
+
+Completed: GitHub Actions run 41481193489 passed full offline and native HUD-window checks, sanitized Native AOT packaging, offline bundled-model check, isolated install/corrupt-update/upgrade/downgrade/uninstall and draft upload from 6c5269ff21d57d1956a5f8acdc545021d3a82017. All seven uploaded digests matched the SHA256SUMS manifest. Published v0.1.2 as latest; anonymous latest-release and update-feed checks returned 0.1.2. Earlier published assets remain untouched.
