@@ -12,6 +12,7 @@ internal sealed class VoiceEnvironment
     public Func<WindowTarget, CancellationToken, Task<SelectionSnapshot?>> CaptureSelection { get; init; } = SelectionSnapshot.CaptureAsync;
     public Func<string, WindowTarget, string, int, CancellationToken, SelectionSnapshot?, Task> Insert { get; init; } = TextInjector.InsertAsync;
     public string? HistoryPath { get; init; }
+    public string? ModelDirectory { get; init; }
     public string? WakeModelRoot { get; init; }
     public bool EditorIntegration { get; init; } = true;
 }

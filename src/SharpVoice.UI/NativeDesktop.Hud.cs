@@ -54,13 +54,33 @@ public sealed partial class NativeDesktop
 
     private unsafe PillPosition ResolvePillPosition(PillPosition position)
     {
+        var area = PillWorkAreaForPosition(position);
+        return PillLayout.Clamp(position, area.Left, area.Top, area.Right, area.Bottom);
+    }
+
+    private unsafe PillWorkArea PillWorkAreaForPosition(PillPosition position)
+    {
         var candidate = new Win32.Rect { Left = position.X, Top = position.Y, Right = position.X, Bottom = position.Y };
         var monitor = MonitorFromRect(&candidate, 2); // MONITOR_DEFAULTTONEAREST
         var info = new HelpMonitorInfo { Size = (uint)sizeof(HelpMonitorInfo) };
         Win32.Rect area;
         if (monitor != 0 && GetMonitorInfoW(monitor, &info) != 0) area = info.Work;
         else Win32.SystemParametersInfoW(0x30, 0, out area, 0);
-        return PillLayout.Clamp(position, area.Left, area.Top, area.Right, area.Bottom);
+        return new(area.Left, area.Top, area.Right, area.Bottom);
+    }
+
+    private unsafe void PositionPillForRecording(nint targetWindow)
+    {
+        if (hudMoving) return;
+        if (targetWindow == 0) targetWindow = Win32.GetForegroundWindow();
+        if (targetWindow == 0) return;
+        var monitor = MonitorFromWindow(targetWindow, 2);
+        var info = new HelpMonitorInfo { Size = (uint)sizeof(HelpMonitorInfo) };
+        if (monitor == 0 || GetMonitorInfoW(monitor, &info) == 0) return;
+        var area = new PillWorkArea(info.Work.Left, info.Work.Top, info.Work.Right, info.Work.Bottom);
+        var source = config.PillPosition is PillPosition saved ? PillWorkAreaForPosition(saved) : area;
+        var position = PillLayout.OnMonitor(config.PillPosition, source, area);
+        SetWindowPos(hudWindow, -1, position.X, position.Y, 0, 0, 0x11); // NOSIZE | NOACTIVATE; showing happens separately.
     }
 
     private void ClampPillToWorkArea()

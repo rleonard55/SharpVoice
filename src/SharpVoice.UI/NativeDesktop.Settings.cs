@@ -94,7 +94,7 @@ public sealed partial class NativeDesktop
         AddChoice("Writing Mode", "Mode", 196, config.Mode, 1004);
         Control("STATIC", "General Instructions (Optional)", 0, 40, 244, 590, 24);
         AddHelp("CustomPrompt", "General Instructions", 1011, 241);
-        fields["CustomPrompt"] = Control("EDIT", config.CustomPrompt, 0x00A11044, 40, 280, 635, 78, 1011);
+        fields["CustomPrompt"] = Control("EDIT", config.CleanupPrompt.Length == 0 ? config.CustomPrompt : config.CleanupPrompt, 0x00A11044, 40, 280, 635, 78, 1011);
         AddChoice("Instructions For", "PromptMode", 384, "prose", 1013);
         promptDrafts["prose"] = config.ProsePrompt; promptDrafts["email"] = config.EmailPrompt;
         promptDrafts["code"] = config.CodePrompt; promptDrafts["casual"] = config.CasualPrompt;
@@ -120,15 +120,15 @@ public sealed partial class NativeDesktop
         buildingPage = 5;
         AddChoice("Start on Sign-In", "StartOnLogin", 196, config.StartOnLogin ? "On" : "Off", 1020);
 
-        Button("Personal Dictionary", 114, 40, 260, 285);
-        Button("Voice Snippets", 115, 350, 260, 285);
-        Button("App Profiles", 116, 40, 320, 285);
-        Button("Recent Dictations", 117, 350, 320, 285);
-        AddChoice("History Storage", "PersistHistory", 390, config.PersistHistory ? "saved" : "memory", 1029);
-        Button("Plugins", 118, 40, 452, 285);
-        Button("Smart Ask AI", 119, 350, 452, 285);
-        Button("Connected Ask AI", 120, 40, 492, 285);
-        Button("Updates", 122, 350, 492, 285);
+        AddChoice("History Storage", "PersistHistory", 236, config.PersistHistory ? "saved" : "memory", 1029);
+        Button("Updates", 122, 40, 282, 285);
+        Button("Personal Dictionary", 114, 40, 328, 285);
+        Button("Voice Snippets", 115, 350, 328, 285);
+        Button("App Profiles", 116, 40, 374, 285);
+        Button("Recent Dictations", 117, 350, 374, 285);
+        Button("Plugins", 118, 40, 420, 285);
+        Button("Smart Ask AI", 119, 350, 420, 285);
+        Button("Connected Ask AI", 120, 40, 466, 285);
 
         buildingPage = -1;
         Control("STATIC", "LAST RESULT", 0, 32, 550, 605, 22);
@@ -285,7 +285,9 @@ public sealed partial class NativeDesktop
             StartOnLogin = SelectedChoice("StartOnLogin") == "On",
             Injection = SelectedChoice("Injection"), PasteDelayMs = int.Parse(Text(fields["PasteDelayMs"]), CultureInfo.InvariantCulture),
             MaxRecordingSeconds = int.Parse(Text(fields["MaxRecordingSeconds"]), CultureInfo.InvariantCulture),
-            CustomPrompt = Text(fields["CustomPrompt"]), ProsePrompt = promptDrafts["prose"], EmailPrompt = promptDrafts["email"], CodePrompt = promptDrafts["code"], CasualPrompt = promptDrafts["casual"]
+            CleanupPrompt = config.CleanupPrompt.Length == 0 ? "" : Text(fields["CustomPrompt"]),
+            CustomPrompt = config.CleanupPrompt.Length == 0 ? Text(fields["CustomPrompt"]) : config.CustomPrompt,
+            ProsePrompt = promptDrafts["prose"], EmailPrompt = promptDrafts["email"], CodePrompt = promptDrafts["code"], CasualPrompt = promptDrafts["casual"]
         };
         next.Validate();
         ConfigChanged?.Invoke(next);
@@ -329,6 +331,7 @@ public sealed partial class NativeDesktop
         CancelShortcutCapture();
         Win32.KillTimer(settingsWindow, 3);
         Win32.ShowWindow(settingsWindow, 0);
+        ResumeSetup();
     }
     private unsafe bool HandleSettingsMessage(uint message, nuint wParam, nint lParam)
     {

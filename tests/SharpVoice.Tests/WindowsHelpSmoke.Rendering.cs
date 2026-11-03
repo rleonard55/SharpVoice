@@ -3,7 +3,7 @@ using SharpVoice.Platform.Windows.Native;
 
 internal static partial class WindowsHelpSmoke
 {
-    private static unsafe uint RenderHelp(nint window, string? output, int sampleY = 10)
+    internal static unsafe uint RenderHelp(nint window, string? output, int sampleY = 10, int sampleX = 10)
     {
         Win32.GetWindowRect(window, out var area);
         var width = area.Right - area.Left; var height = area.Bottom - area.Top;
@@ -13,7 +13,7 @@ internal static partial class WindowsHelpSmoke
         try
         {
             if (PrintWindow(window, dc, 2) == 0) throw new Exception("Cannot render native help popup.");
-            var color = GetPixel(dc, 10, sampleY);
+            var color = GetPixel(dc, sampleX, sampleY);
             if (output is not null)
             {
                 Win32.SelectObject(dc, previous);

@@ -22,6 +22,8 @@
 2. **Start with the included speech model.** The default installer and portable ZIP include Tiny Q5 English—no separate model download needed. AI cleanup starts off, so you can dictate without an AI account.
 3. **Focus a text field**, hold **Ctrl + Alt**, wait for the tone, and speak. Release to transcribe and insert your words.
 
+**First launch:** New users automatically get a skippable setup wizard on first launch for microphone testing, shortcuts, optional AI, and practice dictation. The wizard is not available from Settings. Existing profiles keep tray-only startup.
+
 Requires **Windows 10/11 x64** and an **AVX2/FMA-capable CPU**. No separate .NET installation is needed. Allow desktop microphone access in Windows Settings if prompted.
 
 > **Early release:** The installer is unsigned, so Windows may show a publisher or SmartScreen warning. Try dictation in Notepad first. Exit an already-running development copy before launching an installed copy.
@@ -39,7 +41,7 @@ Requires **Windows 10/11 x64** and an **AVX2/FMA-capable CPU**. No separate .NET
 
 Shortcuts are configurable, with hold or toggle recording. Ordinary dictation below **8 words** skips AI cleanup by default; Ask AI and selected-text edits always use AI. Optional wake phrases let you start without pressing a key.
 
-The [default cleanup prompt](Data/MasterPrompt.txt) is built into the app. **Prompts → General Instructions** adds optional preferences; leaving it blank keeps the packaged defaults.
+The [default cleanup prompt](src/SharpVoice.Core/DefaultPrompts.cs) is built into the app. **Prompts → General Instructions** is pre-filled with that text on a fresh install. Existing saved instructions are preserved; leaving the field blank still uses the packaged defaults.
 
 ## A small app, with room to grow
 

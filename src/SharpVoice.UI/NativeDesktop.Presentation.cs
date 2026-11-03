@@ -33,6 +33,18 @@ public sealed partial class NativeDesktop
         var next = themeProvider();
         if (theme != next) { DeleteThemeBrushes(); theme = next; CreateThemeBrushes(); }
         StyleHelp();
+        if (setupWindow != 0)
+        {
+            var setupDark = theme.Dark ? 1 : 0;
+            Win32.DwmSetWindowAttribute(setupWindow, 20, in setupDark, 4);
+            Win32.InvalidateRect(setupWindow, 0, 1);
+            if (setupMeter != 0)
+            {
+                Win32.SetWindowTheme(setupMeter, "", "");
+                Win32.SendMessageW(setupMeter, 0x2001, 0, (nint)theme.Field);
+                Win32.SendMessageW(setupMeter, 0x409, 0, (nint)theme.Accent);
+            }
+        }
         if (connectedWindow != 0) { var connectedDark=theme.Dark?1:0; Win32.DwmSetWindowAttribute(connectedWindow,20,in connectedDark,4); Win32.InvalidateRect(connectedWindow,0,1); }
         if (answerWindow != 0)
         {
@@ -50,7 +62,7 @@ public sealed partial class NativeDesktop
         var dark = theme.Dark ? 1 : 0;
         if (Win32.DwmSetWindowAttribute(settingsWindow, 20, in dark, 4) < 0)
             Win32.DwmSetWindowAttribute(settingsWindow, 19, in dark, 4);
-        foreach (var control in pages.SelectMany(x => x).Concat(fields.Values).Concat(toolControls).Concat(answerControls).Concat(connectedControls).Distinct())
+        foreach (var control in pages.SelectMany(x => x).Concat(fields.Values).Concat(toolControls).Concat(answerControls).Concat(connectedControls).Concat(setupControls).Distinct())
             Win32.SetWindowTheme(control, theme.Dark ? "DarkMode_Explorer" : "Explorer", null);
         Win32.SetWindowTheme(tabControl, "", "");
         Win32.SetWindowTheme(inputMeter, "", "");
@@ -122,6 +134,13 @@ public sealed partial class NativeDesktop
         4401 => "\uE896", // Install
         4402 => "\uE72C", // Refresh
         108 => "\uE711", // Cancel
+        4801 => "\uE711",
+        4802 => "\uE72B",
+        4803 => "\uE76C",
+        4804 => "\uE720",
+        4805 => "\uE765",
+        4806 => "\uE8F1",
+        4807 => "\uE720",
         _ => null
     };
     private void DrawIconLabel(nint dc, string text, string? glyph, Win32.Rect rect, uint color)
@@ -186,10 +205,10 @@ public sealed partial class NativeDesktop
         if (message is 0x1A or 0x31A or 0x15)
         {
             // System theme broadcasts arrive at each top-level window; update all surfaces once.
-            if (hwnd == messageWindow || hwnd == settingsWindow) ApplyTheme();
+            if (hwnd == messageWindow || hwnd == settingsWindow || hwnd == setupWindow) ApplyTheme();
             return false;
         }
-        if (message == 0x14 && (hwnd == settingsWindow || hwnd == hudWindow || hwnd == toolsWindow || hwnd == answerWindow || hwnd == connectedWindow))
+        if (message == 0x14 && (hwnd == settingsWindow || hwnd == hudWindow || hwnd == toolsWindow || hwnd == answerWindow || hwnd == connectedWindow || hwnd == setupWindow))
         {
             Win32.GetClientRect(hwnd, out var rect);
             Win32.FillRect((nint)wParam, in rect, background);
@@ -255,7 +274,7 @@ public sealed partial class NativeDesktop
                 if ((draw->State & 0x10) != 0) Win32.DrawFocusRect(draw->Dc, in box);
                 result = 1; return true;
             }
-            var primary = draw->Id == 101;
+            var primary = draw->Id is 101 or 4803;
             var pressed = (draw->State & 1) != 0;
             Rounded(draw->Dc, box, primary ? hot ? accentHover : accent : hot ? accent : borderBrush, 10);
             if (!primary) { box.Left++; box.Right--; box.Top++; box.Bottom--; Rounded(draw->Dc, box, pressed || hot ? selectionBrush : inputBackground, 8); }

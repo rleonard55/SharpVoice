@@ -56,3 +56,6 @@ transcripts/
 # Windows-protected provider API key files
 *.dpapi
 *.dpapi.*.tmp
+
+# Optional local copy; the app prompt lives in DefaultPrompts.cs
+/Data/MasterPrompt.txt

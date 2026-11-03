@@ -53,7 +53,8 @@ internal sealed partial class SharpVoiceApp : IDisposable
         InitializeWake(http);
         InitializeConversations();
         InitializeConnected();
-        models = new(http);
+        InitializeSetup();
+        models = new(http, this.environment.ModelDirectory);
         refiner = new(http, auth, claude, google);
         refiner.IdentityChanged += () => desktop.Post(() => { Cancel(); RetireConversations(); ResetConnected(); });
         connectionTester = new(http, auth);
@@ -72,7 +73,22 @@ internal sealed partial class SharpVoiceApp : IDisposable
         desktop.ModelsRefreshRequested = RefreshAvailableModels;
         desktop.ReadLevel = () => recorder.LevelDb;
         desktop.InputPreviewChanged = enabled => { if (enabled && !speechWork.IsCompleted) throw new InvalidOperationException("Stop the spoken answer before previewing the microphone."); recorder.SetPreview(enabled); };
-        desktop.VoicePressed = mode => { if (editorSession.Busy) { desktop.ResetRecordingGesture(); desktop.SetStatus("Finish or cancel the editor voice session first."); return; } RequestVoicePressed(mode); if (!pendingVoiceStart && phase is not (Phase.Arming or Phase.Recording)) desktop.ResetRecordingGesture(); };
+        desktop.VoicePressed = mode =>
+        {
+            if (desktop.SetupOpen)
+            {
+                if (desktop.SetupPracticeFocused && mode == VoiceMode.Dictation)
+                {
+                    try { ToggleSetupPractice(); }
+                    catch (InvalidOperationException ex) { desktop.SetStatus(ex.Message); }
+                }
+                else desktop.SetStatus("Use the practice step to try dictation, or finish/skip setup to dictate into another app.");
+                if (phase is not (Phase.Arming or Phase.Recording)) desktop.ResetRecordingGesture();
+                return;
+            }
+            if (editorSession.Busy) { desktop.ResetRecordingGesture(); desktop.SetStatus("Finish or cancel the editor voice session first."); return; }
+            RequestVoicePressed(mode); if (!pendingVoiceStart && phase is not (Phase.Arming or Phase.Recording)) desktop.ResetRecordingGesture();
+        };
         desktop.Released = () => { if (wakeSession is not null) { wakeSession.ConsumeRelease(); return; } if (!editorSession.Busy) Released(); };
         desktop.CancelRequested = Cancel;
         desktop.PauseChanged = paused =>
@@ -400,12 +416,14 @@ internal sealed partial class SharpVoiceApp : IDisposable
         if (wake is null) FinishWakeOperation();
         if (!microphoneReady) { desktop.SetStatus("Microphone is unavailable. Check Windows permissions, then open Audio settings and Apply to reconnect.", isError: true, warningSound: true); return; }
         var snapshot = environment.CaptureTarget();
-        if ((snapshot.ProcessId == Environment.ProcessId && (wake is not null || !(mode == VoiceMode.AskAi && config.ConnectedAsk && desktop.ConnectedVisible))) || snapshot.Handle == 0)
+        var practice = setupPractice && desktop.SetupPracticeFocused && snapshot.ProcessId == Environment.ProcessId;
+        if (setupPractice && !practice) { desktop.SetStatus("Return to the practice step before recording."); return; }
+        if ((snapshot.ProcessId == Environment.ProcessId && !practice && (wake is not null || !(mode == VoiceMode.AskAi && config.ConnectedAsk && desktop.ConnectedVisible))) || snapshot.Handle == 0)
         {
             desktop.SetStatus("Focus a text field in another app, then hold the dictation key.");
             return;
         }
-        recordingConfig = WritingTools.Resolve(config, snapshot.ProcessName);
+        recordingConfig = practice ? config with { Backend = "none", ConnectedAsk = false } : WritingTools.Resolve(config, snapshot.ProcessName);
         recordingModel = "";
         if (wake is null && mode == VoiceMode.AskAi && recordingConfig.Backend == "none" && !config.ConnectedAsk)
         {
@@ -430,9 +448,9 @@ internal sealed partial class SharpVoiceApp : IDisposable
             selectionCapture.Dispose();
             phase = Phase.Arming;
             var armed = wake is WakeDetection detected ? recorder.BeginWakeAsync(detected.StartSample, detected.Epoch, operation.Token) : recorder.BeginAsync(operation.Token);
-            selectionCapture = new(wake is null && mode == VoiceMode.AskAi && config.ConnectedAsk ? Task.FromResult<SelectionSnapshot?>(null) : environment.CaptureSelection(snapshot, operation.Token));
+            selectionCapture = new(practice || (wake is null && mode == VoiceMode.AskAi && config.ConnectedAsk) ? Task.FromResult<SelectionSnapshot?>(null) : environment.CaptureSelection(snapshot, operation.Token));
             preloads.Add(selectionCapture.Disposal);
-            desktop.SetActive(true);
+            desktop.SetActive(true, snapshot.Handle);
             desktop.SetStatus("Starting microphone · Wait for the start tone…", true);
             preloads.Add(ObserveSelectionAsync(selectionCapture.Value, generation, operation.Token));
             var selectedModel = recordingConfig.SpeechModel;
@@ -484,6 +502,7 @@ internal sealed partial class SharpVoiceApp : IDisposable
         if (generation != id || phase != Phase.Arming || lifetime.IsCancellationRequested || operation?.IsCancellationRequested != false) return;
         phase = Phase.Recording;
         desktop.SetRecording(true);
+        if (setupPractice) desktop.SetSetupPracticeState(true, recording: true);
         if (answerReply is not null) { desktop.SetAnswerReplyState(true, recording: true); desktop.SetAnswerStatus("Listening · Click Stop Recording when finished"); }
         if (wakeSession is null && !editorSession.Busy && recordingMode == VoiceMode.AskAi && recordingConfig.ConnectedAsk) desktop.SetConnectedRecording(true);
         if (editorSession.Busy) SendEditor(new("status", editorSession.Id, Message: "recording"));
@@ -512,11 +531,14 @@ internal sealed partial class SharpVoiceApp : IDisposable
         StopSilenceWatch();
         phase = Phase.Processing;
         desktop.SetStatus("Finalizing Transcript…", true);
+        if (setupPractice) desktop.SetSetupPracticeState(true);
         var id = generation;
         var ct = operation!.Token;
         var activeConfig = recordingConfig;
         var activeMode = recordingMode;
         var activeWake = wakeSession;
+        var activePractice = setupPractice;
+        var practiceSession = setupPracticeSession;
         var destination = target!;
         var capturedSelection = selectionCapture;
         work = Task.Run(async () =>
@@ -555,6 +577,11 @@ internal sealed partial class SharpVoiceApp : IDisposable
                     Ui(() => { recordingMode = activeMode; desktop.SetVoiceMode(activeMode); desktop.SetEditingSelection(selection is not null); });
                 }
                 if (string.IsNullOrWhiteSpace(transcript)) { Ui(() => desktop.SetStatus("No text was transcribed. Nothing was sent to the AI or inserted.", true, isError: true, warningSound: true)); return; }
+                if (activePractice)
+                {
+                    Ui(() => { desktop.SetSetupPracticeResult(transcript, practiceSession); desktop.SetStatus("Practice complete · Your words stayed inside setup."); });
+                    return;
+                }
                 if (activeMode == VoiceMode.AskAi && activeConfig.Backend == "none" && !activeConfig.ConnectedAsk) throw new InvalidOperationException("Ask AI needs an AI provider for this app. Choose one in AI & Models or its App Profile.");
                 Ui(() => desktop.SetPreview(transcript, retain: true));
                 if (activeMode == VoiceMode.AskAi && activeConfig.ConnectedAsk) { await RunConnectedAsync(transcript, activeConfig, ct); return; }
@@ -618,7 +645,7 @@ internal sealed partial class SharpVoiceApp : IDisposable
             {
                 if (askLease is not null) conversations.Cancel(askLease); // No-op if already completed.
                 if (!retainedSelection) capturedSelection.Dispose();
-                Ui(() => { desktop.SetRecording(false); phase = Phase.Idle; FinishWakeOperation(); desktop.SetActive(false); PublishWorkspace(); });
+                Ui(() => { desktop.SetRecording(false); phase = Phase.Idle; FinishWakeOperation(); FinishSetupPractice(); desktop.SetActive(false); PublishWorkspace(); });
             }
         });
     }
@@ -658,6 +685,7 @@ internal sealed partial class SharpVoiceApp : IDisposable
             if (generation != id || phase != Phase.Cancelling || lifetime.IsCancellationRequested) return;
             phase = Phase.Idle;
             FinishWakeOperation();
+            FinishSetupPractice();
             desktop.SetActive(false); PublishWorkspace();
         });
     }
@@ -711,6 +739,7 @@ internal sealed partial class SharpVoiceApp : IDisposable
 
     public void Dispose()
     {
+        desktop.StopSetupMicrophone();
         wakeTimer?.Dispose();
         editorTimer?.Dispose();
         StopSilenceWatch(); silenceTimer?.Dispose();

@@ -16,6 +16,7 @@ public sealed partial class NativeDesktop : IDisposable
     private readonly Dictionary<string, nint> fields = [];
     private ThemeColors theme;
     private readonly Func<ThemeColors> themeProvider;
+    private readonly Func<nint> foregroundWindow;
     private nint background, inputBackground, accent, surfaceBrush, borderBrush, selectionBrush;
     private readonly nint font = Win32.CreateFontW(-17, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
     private readonly nint headingFont = Win32.CreateFontW(-24, 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
@@ -56,10 +57,11 @@ public sealed partial class NativeDesktop : IDisposable
     public nint SettingsHandle => settingsWindow;
     public bool IsPaused => paused;
 
-    public NativeDesktop(AppConfig config, Func<ThemeColors>? themeProvider = null)
+    public NativeDesktop(AppConfig config, Func<ThemeColors>? themeProvider = null, Func<nint>? foregroundWindowProvider = null)
     {
         this.config = config;
         this.themeProvider = themeProvider ?? ThemeColors.ReadSystem;
+        foregroundWindow = foregroundWindowProvider ?? Win32.GetForegroundWindow;
         theme = this.themeProvider();
     }
 
@@ -130,6 +132,7 @@ public sealed partial class NativeDesktop : IDisposable
     public void SetStatus(string text, bool showHud = false, bool isError = false, bool warningSound = false)
     {
         status = text;
+        if (setupWindow != 0 && !setupInSettings) Win32.SetWindowTextW(setupNotice, text);
         if (isError)
         {
             hudPasteCompleted = false;
@@ -168,7 +171,7 @@ public sealed partial class NativeDesktop : IDisposable
     {
         if (icons is null) return;
         var pair = icons[feedback.State];
-        foreach (var window in new[] { messageWindow, settingsWindow, hudWindow, toolsWindow, connectedWindow })
+        foreach (var window in new[] { messageWindow, settingsWindow, hudWindow, toolsWindow, connectedWindow, setupWindow })
         {
             if (window == 0) continue;
             Win32.SendMessageW(window, 0x80, 1, pair.Large); // WM_SETICON, ICON_BIG
@@ -187,8 +190,9 @@ public sealed partial class NativeDesktop : IDisposable
         Win32.InvalidateRect(hudWindow, 0, 0);
     }
 
-    public void SetActive(bool value)
+    public void SetActive(bool value, nint targetWindow = 0)
     {
+        if (value && !active) PositionPillForRecording(targetWindow);
         if (value) { hudPasteCompleted = false; CancelHistoryRetry(); CancelConnectionTest(); HideHelp(); StopInputPreview(); }
         active = value;
         RefreshHistoryRetryControls();
@@ -325,6 +329,7 @@ public sealed partial class NativeDesktop : IDisposable
                 return 0;
             }
             if (self.HandleHelpMessage(hwnd, message, wParam, lParam, out var helpResult)) return helpResult;
+            if (self.HandleSetupMessage(hwnd, message, wParam)) return 0;
             if (self.HandleConnectedMessage(hwnd, message, wParam)) return 0;
             if (self.HandleAnswerMessage(hwnd, message, wParam)) return 0;
             if (self.HandlePresentationMessage(hwnd, message, wParam, lParam, out var presentationResult)) return presentationResult;
@@ -401,7 +406,8 @@ public sealed partial class NativeDesktop : IDisposable
         int result;
         while ((result = Win32.GetMessageW(out var message, 0, 0, 0)) > 0)
         {
-            if (HandleConnectedInput(in message) || HandleAnswerInput(in message) || HandleToolsInput(in message) || HandleLocalDownloadInput(in message) || HandleConnectionInput(in message) || HandleHelpInput(in message)) continue;
+            if (HandleSetupInput(in message) || HandleConnectedInput(in message) || HandleAnswerInput(in message) || HandleToolsInput(in message) || HandleLocalDownloadInput(in message) || HandleConnectionInput(in message) || HandleHelpInput(in message)) continue;
+            if (setupWindow != 0 && Win32.IsWindowVisible(setupWindow) != 0 && Win32.IsDialogMessageW(setupWindow, message) != 0) continue;
             if (connectedWindow != 0 && Win32.IsWindowVisible(connectedWindow) != 0 && Win32.IsDialogMessageW(connectedWindow, message) != 0) continue;
             if (answerWindow != 0 && Win32.IsWindowVisible(answerWindow) != 0 && Win32.IsDialogMessageW(answerWindow, message) != 0) continue;
             if (toolsWindow != 0 && Win32.IsDialogMessageW(toolsWindow, message) != 0) continue;
@@ -415,6 +421,7 @@ public sealed partial class NativeDesktop : IDisposable
     public void Dispose()
     {
         disposed = true;
+        CloseSetupCore();
         HideAnswer(); HideConnected(); CancelConnectedDiscovery();
         if (connectedWindow != 0) Win32.DestroyWindow(connectedWindow);
         if (answerWindow != 0) Win32.DestroyWindow(answerWindow);

@@ -60,6 +60,7 @@ internal static class Program
         using var app = new SharpVoiceApp(config, desktop, http, auth);
         using var updates = new AppUpdateHost(config, desktop, app, updater);
         app.Start(warning);
+        desktop.ShowSetupIfNeeded();
         desktop.Run();
         return updates.RestartRequested;
     }

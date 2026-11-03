@@ -10,7 +10,6 @@
     <ProjectReference Include="../../src/SharpVoice.UI/SharpVoice.UI.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="../../Data/MasterPrompt.txt" Link="Fixtures/MasterPrompt.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Fixtures/Wake/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

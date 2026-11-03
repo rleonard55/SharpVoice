@@ -53,7 +53,8 @@ internal static partial class WindowsHelpSmoke
                 Win32.EnableWindow(control, 0);
                 var disabled = Pixel(control);
                 Win32.SendMessageW(control, 0x200, 0, 0);
-                Check(Pixel(control) == disabled, "Disabled control retained an interactive hover.");
+                var disabledAfterMove = Pixel(control);
+                Check(disabledAfterMove == disabled, $"Disabled control {id} retained an interactive hover in {(palette.Dark ? "dark" : "light")} theme ({disabled:X8} -> {disabledAfterMove:X8}).");
                 Win32.EnableWindow(control, 1);
                 Win32.SendMessageW(control, 0x2A3, 0, 0);
             }

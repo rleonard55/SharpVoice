@@ -35,6 +35,7 @@ public sealed record AppConfig
     public int MinimumAiWords { get; init; } = 8;
     public string Mode { get; init; } = "auto";
     public bool StartOnLogin { get; init; }
+    public bool SetupFinished { get; init; }
     public bool AutomaticUpdates { get; init; } = true;
     public string UpdateAction { get; init; } = "install";
     public string Injection { get; init; } = "clipboard";
@@ -42,6 +43,7 @@ public sealed record AppConfig
     public int MaxRecordingSeconds { get; init; } = 120;
     public PillPosition? PillPosition { get; init; }
     public string CustomPrompt { get; init; } = "";
+    public string CleanupPrompt { get; init; } = "";
     public string ProsePrompt { get; init; } = "";
     public string EmailPrompt { get; init; } = "";
     public string CodePrompt { get; init; } = "";
@@ -62,12 +64,14 @@ public sealed record AppConfig
         && MinimumAiWords == other.MinimumAiWords
         && Mode == other.Mode
         && StartOnLogin == other.StartOnLogin
+        && SetupFinished == other.SetupFinished
         && AutomaticUpdates == other.AutomaticUpdates && UpdateAction == other.UpdateAction
         && Injection == other.Injection
         && PasteDelayMs == other.PasteDelayMs
         && MaxRecordingSeconds == other.MaxRecordingSeconds
         && PillPosition == other.PillPosition
         && CustomPrompt == other.CustomPrompt
+        && CleanupPrompt == other.CleanupPrompt
         && ProsePrompt == other.ProsePrompt
         && EmailPrompt == other.EmailPrompt
         && CodePrompt == other.CodePrompt
@@ -98,7 +102,7 @@ public sealed record AppConfig
         if (HotkeyDefinition.IsStrictSubset(AskHotkey, Hotkey)) throw new ArgumentException("Ask AI must include a different or an extra key; otherwise the dictation shortcut cannot start.");
         if (MicrophoneActivation is not ("on_hotkey" or "keep_ready")) throw new ArgumentException("Choose On Hotkey or Keep Ready microphone activation.");
         if (AudioDeviceId is null || AudioDeviceId.Length > 4096) throw new ArgumentException("Invalid microphone selection.");
-        if (new[] { CustomPrompt, ProsePrompt, EmailPrompt, CodePrompt, CasualPrompt }.Any(x => x is null || x.Length > 32000)) throw new ArgumentException("Each prompt must be at most 32,000 characters.");
+        if (new[] { CustomPrompt, CleanupPrompt, ProsePrompt, EmailPrompt, CodePrompt, CasualPrompt }.Any(x => x is null || x.Length > 32000)) throw new ArgumentException("Each prompt must be at most 32,000 characters.");
         if (Backend is not ("none" or "chatgpt_oauth" or "claude_code" or "gemini_antigravity" or "gemini_api" or "embedded")) throw new ArgumentException("Unknown refinement backend.");
         if (Backend == "embedded" && LocalAiModels.Find(RefinementModel) is null) throw new ArgumentException("Choose a supported local AI model from the list.");
         if (MinimumAiWords is < 0 or > 1000) throw new ArgumentException("Minimum words for AI must be between 0 and 1000. Use 0 to always refine.");
@@ -128,7 +132,7 @@ public static class ConfigManager
     public static AppConfig Load(string? path = null)
     {
         path ??= AppPaths.Config;
-        if (!File.Exists(path)) return new AppConfig();
+        if (!File.Exists(path)) return new AppConfig { CleanupPrompt = DefaultPrompts.MasterPrompt };
         var json = File.ReadAllText(path);
         using var document = JsonDocument.Parse(json);
         var hasBackend = document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.TryGetProperty("backend", out _);
@@ -152,6 +156,7 @@ public static class ConfigManager
             RecordingGesture = document.RootElement.TryGetProperty("recording_gesture", out _) ? config.RecordingGesture : "hold",
             LiveTranscription = document.RootElement.TryGetProperty("live_transcription", out _) ? config.LiveTranscription : true,
             AutomaticUpdates = document.RootElement.TryGetProperty("automatic_updates", out _) ? config.AutomaticUpdates : true,
+            SetupFinished = !document.RootElement.TryGetProperty("setup_finished", out _) || config.SetupFinished,
             UpdateAction = document.RootElement.TryGetProperty("update_action", out _) ? config.UpdateAction : "install",
             Backend = hasBackend ? config.Backend : "none",
             AskHotkey = hasAskHotkey ? config.AskHotkey : defaultAskHotkey,
@@ -162,6 +167,7 @@ public static class ConfigManager
             WakeSilenceSeconds = document.RootElement.TryGetProperty("wake_silence_seconds", out _) ? config.WakeSilenceSeconds : 2,
             AudioDeviceId = config.AudioDeviceId ?? "",
             CustomPrompt = config.CustomPrompt ?? "",
+            CleanupPrompt = config.CleanupPrompt ?? "",
             ProsePrompt = config.ProsePrompt ?? "",
             EmailPrompt = config.EmailPrompt ?? "",
             CodePrompt = config.CodePrompt ?? "",

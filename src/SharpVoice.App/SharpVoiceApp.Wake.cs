@@ -90,7 +90,7 @@ internal sealed partial class SharpVoiceApp
         var confirming = wakeSession is not null && !wakeConfirmed && Environment.TickCount64 - wakeStartedAt < 8000
             && phase is Phase.Arming or Phase.Recording && !workspaceAsking && answerReply is null;
         return new(config.WakePhrasesEnabled, ready, desktop.IsPaused, speechInput.Suspended || !speechWork.IsCompleted,
-            authBusy, editorSession.Busy || pendingVoiceStart, phase == Phase.Idle, confirming, Environment.TickCount64, wakeRearmAt);
+            authBusy, editorSession.Busy || pendingVoiceStart || desktop.SetupOpen, phase == Phase.Idle, confirming, Environment.TickCount64, wakeRearmAt);
     }
     private void RefreshWakeListening()
     {

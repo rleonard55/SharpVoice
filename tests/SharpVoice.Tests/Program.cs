@@ -221,6 +221,9 @@ if (args is ["--windows-help-smoke", var helpOutput]) { WindowsHelpSmoke.Run(hel
 
 if (args is ["--windows-hud-smoke"]) { WindowsHudSmoke.Run(); return 0; }
 if (args is ["--windows-hud-window-smoke"]) { WindowsHudWindowChecks.Run(); return 0; }
+if (args is ["--windows-onboarding-smoke"]) { WindowsOnboardingChecks.Run(); return 0; }
+if (args is ["--windows-onboarding-smoke", var setupOutput]) { WindowsOnboardingChecks.Run(setupOutput); return 0; }
+if (args is ["--windows-onboarding-app-smoke", var setupModel, var setupWav]) { WindowsOnboardingChecks.RunApp(setupModel, setupWav); return 0; }
 
 if (args is ["--config-smoke", var configPath])
 {
@@ -627,10 +630,42 @@ var tests = new (string Name, Func<Task> Run)[]
     }),
     ("Refinement uses the supplied master prompt verbatim before optional instructions", () =>
     {
-        var master = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "MasterPrompt.txt"));
+        var master = DefaultPrompts.MasterPrompt;
+        Equal("D5AA064E3E95928651C6D0BF045657F72B0373A0CCC7F2AE8E7B6BAFC41C258C", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(master))));
         Equal(master, PromptTemplates.For("prose", ""));
         Equal(true, PromptTemplates.For("code", "Preserve our project terms.").StartsWith(master, StringComparison.Ordinal));
         Equal(true, PromptTemplates.For("code", "Preserve our project terms.").EndsWith("Preserve our project terms.", StringComparison.Ordinal));
+        return Task.CompletedTask;
+    }),
+    ("Pre-filled general instructions do not duplicate cleanup rules or override selection editing", () =>
+    {
+        var master = DefaultPrompts.MasterPrompt;
+        Equal(master, PromptTemplates.For("prose", master));
+        var config = new AppConfig { CustomPrompt = master.Replace("\r\n", "\n") + "\n\nPreserve ticket IDs." };
+        var cleanup = PromptTemplates.For("prose", config);
+        Equal(cleanup.IndexOf("# Intelligent Dictation Cleanup Engine", StringComparison.Ordinal), cleanup.LastIndexOf("# Intelligent Dictation Cleanup Engine", StringComparison.Ordinal));
+        Equal(true, cleanup.Contains("Preserve ticket IDs."));
+        var selection = PromptTemplates.ForSelection("prose", config);
+        Equal(false, selection.Contains("# Intelligent Dictation Cleanup Engine"));
+        Equal(true, selection.Contains("Preserve ticket IDs."));
+        return Task.CompletedTask;
+    }),
+    ("Editing the full cleanup template stays isolated from selection editing and preserves profile preferences", () =>
+    {
+        var template = "Use British English.\n\n" + DefaultPrompts.MasterPrompt.Replace("BALANCED (default)", "LIGHT (default)");
+        var config = new AppConfig { CleanupPrompt = template, CustomPrompt = "Preserve ticket IDs.", Profiles = [new("Mail", "outlook", Instructions: "Keep paragraphs short.")] };
+        var resolved = WritingTools.Resolve(config, "outlook");
+        var cleanup = PromptTemplates.For("prose", resolved);
+        Equal(true, cleanup.StartsWith(template, StringComparison.Ordinal));
+        Equal(cleanup.IndexOf("# Intelligent Dictation Cleanup Engine", StringComparison.Ordinal), cleanup.LastIndexOf("# Intelligent Dictation Cleanup Engine", StringComparison.Ordinal));
+        Equal(true, cleanup.Contains("Preserve ticket IDs."));
+        Equal(true, cleanup.Contains("Keep paragraphs short."));
+        var selection = PromptTemplates.ForSelection("prose", resolved);
+        Equal(false, selection.Contains("# Intelligent Dictation Cleanup Engine"));
+        Equal(false, selection.Contains("Use British English."));
+        Equal(true, selection.Contains("Preserve ticket IDs."));
+        Equal(true, selection.Contains("Keep paragraphs short."));
+        Equal(DefaultPrompts.MasterPrompt, PromptTemplates.For("prose", new AppConfig { CleanupPrompt = "" }));
         return Task.CompletedTask;
     }),
     ("Ctrl+Alt starts once in either order and stops on either release", () =>
@@ -813,7 +848,7 @@ var tests = new (string Name, Func<Task> Run)[]
         try
         {
             File.WriteAllText(path, legacy);
-            var expected = new AppConfig { Backend = "chatgpt_oauth", SpeechModel = "tiny.en", CustomPrompt = "Preserve ticket IDs." };
+            var expected = new AppConfig { Backend = "chatgpt_oauth", SpeechModel = "tiny.en", CustomPrompt = "Preserve ticket IDs.", SetupFinished = true };
             Equal(expected, ConfigManager.Load(path));
             File.WriteAllText(path, legacy.Replace("\"speech_model\"", "\"audio_device_id\":null,\"email_prompt\":null,\"speech_model\""));
             Equal(expected, ConfigManager.Load(path));
@@ -1002,6 +1037,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Missing or corrupt included models retain verified download recovery", BundledModelChecks.Recovery),
     ("Included model resolution respects cancellation", BundledModelChecks.Cancellation),
     ("Pill placement preserves valid monitors and recovers offscreen coordinates", PillLayoutChecks.Placement),
+    ("Pill follows the focused monitor while preserving relative placement", PillLayoutChecks.FocusedMonitor),
+    ("First-launch setup preserves skip, pending and legacy preferences", OnboardingChecks.Preferences),
     ("Pill position persists without changing other settings or legacy defaults", PillLayoutChecks.Persistence),
     ("Model integrity check rejects changed bytes", async () =>
     {
@@ -1047,7 +1084,7 @@ var tests = new (string Name, Func<Task> Run)[]
             using var payload = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
             Equal("available-model", payload.RootElement.GetProperty("model").GetString());
             Equal(false, payload.RootElement.GetProperty("store").GetBoolean());
-            Equal(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "MasterPrompt.txt")), payload.RootElement.GetProperty("instructions").GetString());
+            Equal(DefaultPrompts.MasterPrompt, payload.RootElement.GetProperty("instructions").GetString());
             return Sse("data: {\"type\":\"response.output_text.delta\",\"delta\":\"Hello world.\"}\n\ndata: {\"type\":\"response.completed\"}\n\n");
         }));
         var refiner = new UnifiedRefiner(http, new FixtureSessionProvider());

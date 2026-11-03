@@ -3,6 +3,20 @@ using System.Text.Json;
 
 internal static class PillLayoutChecks
 {
+    internal static Task FocusedMonitor()
+    {
+        var primary = new PillWorkArea(0, 0, 1920, 1040);
+        var left = new PillWorkArea(-2560, -200, 0, 1200);
+        Check(PillLayout.OnMonitor(null, primary, left) == new PillPosition(-1540, 1064), "An unplaced pill must default to bottom center on the focused monitor.");
+        Check(PillLayout.OnMonitor(new(700, 904), primary, left) == new PillPosition(-1540, 1049), "Saved bottom-center placement must follow the focused monitor.");
+        Check(PillLayout.OnMonitor(new(1400, 0), primary, left) == new PillPosition(-520, -200), "Top-right placement must survive different monitor sizes and negative coordinates.");
+        Check(PillLayout.OnMonitor(new(-1540, 1049), left, primary) == new PillPosition(700, 904), "Returning to the original monitor must preserve relative placement.");
+        Check(PillLayout.OnMonitor(new(200, 300), primary, primary) == new PillPosition(200, 300), "Same-monitor placement must not change.");
+        Check(PillLayout.OnMonitor(new(int.MinValue, int.MaxValue), primary, left) == new PillPosition(-2560, 1104), "Invalid old coordinates must be clamped before mapping.");
+        Check(PillLayout.OnMonitor(null, primary, new(0, 0, 300, 60)) == new PillPosition(0, 0), "Small target work areas must stay accessible.");
+        return Task.CompletedTask;
+    }
+
     internal static Task Placement()
     {
         Check(PillLayout.Clamp(new(-1500, 500), -1920, 0, 0, 1080) == new PillPosition(-1500, 500), "Valid negative monitor coordinates must be retained.");

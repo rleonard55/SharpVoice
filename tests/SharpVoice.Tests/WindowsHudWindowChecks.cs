@@ -59,7 +59,7 @@ internal static partial class WindowsHudWindowChecks
             Win32.GetWindowRect(hud, out var before);
             var foreground = Win32.GetForegroundWindow();
             var attempt = 0;
-            foreach (var show in new Action[] { () => desktop.SetActive(true), () => desktop.SetStatus("Transcribing", showHud: true), () => desktop.SetActive(true) })
+            foreach (var show in new Action[] { () => desktop.SetActive(true, target), () => desktop.SetStatus("Transcribing", showHud: true), () => desktop.SetActive(true, blocker) })
             {
                 // Also simulate loss of the creation-time TOPMOST state.
                 Check(SetWindowPos(hud, -2, 0, 0, 0, 0, 0x13) != 0, "Cannot lower test HUD.");

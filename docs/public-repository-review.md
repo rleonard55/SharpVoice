@@ -8,7 +8,7 @@ No personal credentials were identified in the candidate public source or its bu
 
 The final candidate inventory contains **565 files**. Gitleaks reports **no leaks** after the narrowly scoped, reviewed public-value exceptions. All **35 credential/generated-file ignore checks** pass, and all **four synthetic canaries** are detected, including canaries inside tests and an archive. The refreshed text/binary privacy-pattern check inspected **836 bundled archive entries**, including nested package contents; no oversized entries were skipped. The original independent review covered 295 archive entries.
 
-The source includes the product specification and `Data/MasterPrompt.txt`. These contain product instructions and generic examples, and will be public with the source. The reviewed test email addresses use reserved example domains. Third-party author emails and upstream build paths in redistributed packages are attribution/build metadata, not this developer's private account data.
+The source includes the product specification and the built-in prompt in `src/SharpVoice.Core/DefaultPrompts.cs`. These contain product instructions and generic examples, and will be public with the source. The reviewed test email addresses use reserved example domains. Third-party author emails and upstream build paths in redistributed packages are attribution/build metadata, not this developer's private account data.
 
 ## Git Boundary and History
 
