@@ -41,7 +41,7 @@ Consume task 1 journal. Snapshot all records oldest first on open; Copy uses pre
 - [x] Implement native UI with keyboard support and readable light/dark themes.
 - [x] Add issue template, privacy and corporate troubleshooting documentation.
 - [x] Strict AOT publisher exit verified (0), no warnings/errors.
-- [ ] Commit/push and verify remote revision.
+- [x] Commit/push and verify remote revision.
 - [x] Full offline/native checks and independent privacy review.
 
 ## Execution ledger
@@ -54,3 +54,5 @@ Task 3 validation: native preview/copy/fixed URL/Clear/boundary-failure checks p
 Final review: independent read-only review identified HTML block-page categorization and lost provider-limit guidance; both reproduced RED, corrected, and verified GREEN. An older SSE fixture was updated to declare the real text/event-stream content type.
 Final: minor (deferred): the latest explanation and report are sampled separately; a concurrent new failure can make the explanation newer than the report snapshot. Copy always matches the exact preview.
 Privacy: changed-source Gitleaks 8.30.1 scan reports no leaks. Native candidate starts successfully with --release-info without audio/account access.
+
+Delivery: implementation commit `7bde06a34f536e21a6b3ccd982d2933a5d13e318` pushed to GitHub main and fetched through the connected GitHub tool; the issue template on main was independently read back. The running app and packaged releases were not replaced.
