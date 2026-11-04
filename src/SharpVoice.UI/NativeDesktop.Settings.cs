@@ -90,7 +90,7 @@ public sealed partial class NativeDesktop
         signInButton = Button("ChatGPT Sign In", 102, 40, 456, 200);
         signOutButton = Button("ChatGPT Sign Out", 103, 40, 456, 200);
 
-        var diagnosticsButton = Button("Diagnostics", 123, 40, 500, 200);
+        var diagnosticsButton = Button("Diagnostics", 124, 40, 500, 200);
         if (Win32.SetWindowSubclass(diagnosticsButton, &ConnectionProcedure, 1, 0) == 0) throw new InvalidOperationException("Could not initialize diagnostics action.");
 
         buildingPage = 2;
@@ -366,7 +366,7 @@ public sealed partial class NativeDesktop
         }
         if ((notification == 1 || notification == 5) && id == 1003) { RefreshModelHint(); return true; }
         if (notification == 0 && id == 113) { RequestLocalDownload(); return true; }
-        if (notification == 0 && id == 123) { OpenProviderDiagnostics(); return true; }
+        if (notification == 0 && id == 124) { OpenProviderDiagnostics(); return true; }
         if (notification == 0 && id == 112) { RequestConnectionTest(); return true; }
         if (notification == 0 && id == 109) { RequestModelsRefresh(); return true; }
         if (notification == 1 && id == 1002) { BackendChanged(); return true; }

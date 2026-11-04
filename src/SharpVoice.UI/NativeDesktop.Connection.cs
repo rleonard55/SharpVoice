@@ -19,7 +19,7 @@ public sealed partial class NativeDesktop
     private void RefreshConnectionTestControls()
     {
         if (connectionTestButton == 0) return;
-        Win32.EnableWindow(Win32.GetDlgItem(settingsWindow, 123), active ? 0 : 1);
+        Win32.EnableWindow(Win32.GetDlgItem(settingsWindow, 124), active ? 0 : 1);
         var backend = SelectedChoice("Backend");
         var authBusy = IsAuthenticationBusy?.Invoke() == true;
         if ((connectionBackend.Length != 0 && (connectionBackend != backend || connectionModel != SelectedModelId())) || authBusy || active)
@@ -121,7 +121,7 @@ public sealed partial class NativeDesktop
     }
     internal bool HandleConnectionInput(in Win32.Msg message)
     {
-        if ((message.Hwnd != connectionTestButton && message.Hwnd != Win32.GetDlgItem(settingsWindow, 123)) || message.Message is not (0x100 or 0x101) || message.WParam is not (13 or 32)) return false;
+        if ((message.Hwnd != connectionTestButton && message.Hwnd != Win32.GetDlgItem(settingsWindow, 124)) || message.Message is not (0x100 or 0x101) || message.WParam is not (13 or 32)) return false;
         if (message.Message == 0x100 && ((long)message.LParam & (1L << 30)) == 0)
         {
             if (message.Hwnd == connectionTestButton) RequestConnectionTest();

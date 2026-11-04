@@ -20,11 +20,11 @@ internal static partial class WindowsHelpSmoke
         Win32.SendMessageW(tabs, 0x130C, 1, 0);
         var notice = new Win32.Notification { Window = tabs, Id = 1014, Code = -551 };
         Win32.SendMessageW(window, 0x4E, 1014, (nint)(&notice));
-        var button = Win32.GetDlgItem(window, 123);
+        var button = Win32.GetDlgItem(window, 124);
         if (button == 0 || Win32.IsWindowVisible(button) == 0) throw new Exception("AI & Models has no visible Diagnostics action.");
         ProviderDiagnostics.Shared.Clear();
         ProviderDiagnostics.Shared.Record(new(ProviderOperationKind.ChatGptInference, ProviderFailureKind.Tls, null, null, 125));
-        Win32.SendMessageW(window, 0x111, 123, button);
+        Win32.SendMessageW(window, 0x111, 124, button);
         if (desktop.ToolsWindow == 0 || desktop.ToolField("DiagnosticReport") == 0) throw new Exception("Diagnostics has no report preview.");
         string Read(nint handle)
         {
