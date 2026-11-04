@@ -57,9 +57,11 @@ public sealed partial class NativeDesktop : IDisposable
     public nint SettingsHandle => settingsWindow;
     public bool IsPaused => paused;
 
-    public NativeDesktop(AppConfig config, Func<ThemeColors>? themeProvider = null, Func<nint>? foregroundWindowProvider = null)
+    public NativeDesktop(AppConfig config, Func<ThemeColors>? themeProvider = null, Func<nint>? foregroundWindowProvider = null, Action<string, nint>? copyDiagnostics = null, Action<string>? openDiagnosticsUrl = null)
     {
         this.config = config;
+        this.copyDiagnostics = copyDiagnostics ?? TextInjector.SetClipboardText;
+        this.openDiagnosticsUrl = openDiagnosticsUrl ?? OpenDiagnosticBrowser;
         this.themeProvider = themeProvider ?? ThemeColors.ReadSystem;
         foregroundWindow = foregroundWindowProvider ?? Win32.GetForegroundWindow;
         theme = this.themeProvider();

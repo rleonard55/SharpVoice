@@ -203,6 +203,7 @@ public sealed partial class NativeDesktop
         CancelHistoryRetry(); ClearControlHover();
         if (toolsWindow != 0) { var old = toolsWindow; toolsWindow = 0; Win32.DestroyWindow(old); }
         foreach (var control in toolControls) editableCombos.Remove(control);
+        diagnosticReport = "";
         toolControls.Clear(); toolFields.Clear(); toolButtons.Clear(); toolsList = toolsNotice = 0; toolsKind = "";
     }
     private bool HandleToolsMessage(nint hwnd, uint message, nuint wParam, nint lParam)
@@ -214,7 +215,7 @@ public sealed partial class NativeDesktop
         var id = (int)(wParam & 0xFFFF); var notification = wParam >> 16;
         try
         {
-            if (id == 4101 && notification == 1) { if (toolsKind == "plugins") RequestPlugin(install: false); else if (toolsKind == "connected") SelectConnectedTool(); else if (toolsKind == "history") SelectHistory(); else if (toolsKind != "smartask") SelectRule(); }
+            if (id == 4101 && notification == 1) { if (toolsKind == "plugins") RequestPlugin(install: false); else if (toolsKind == "connected") SelectConnectedTool(); else if (toolsKind == "history") SelectHistory(); else if (toolsKind is not ("smartask" or "diagnostics")) SelectRule(); }
             if (notification == 0) switch (id)
             {
                 case 2: case 4205: CloseTools(); break;
@@ -243,7 +244,7 @@ public sealed partial class NativeDesktop
                 case 4482: if (toolsKind == "wake") WakePreparationRetryRequested?.Invoke(); break;
                 case 4483: if (toolsKind == "wake") WakePreparationCancelRequested?.Invoke(); break;
                 case 4484: if (toolsKind == "wake") ToggleHelp(2121); break;
-                default: if (toolsKind == "history") HandleHistoryCommand(id); break;
+                default: if (toolsKind == "history") HandleHistoryCommand(id); else if (toolsKind == "diagnostics") HandleDiagnosticCommand(id); break;
             }
         }
         catch (Exception ex) { Win32.SetWindowTextW(toolsNotice, Short(ex.Message, 190)); }

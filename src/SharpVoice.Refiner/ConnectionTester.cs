@@ -7,7 +7,13 @@ namespace SharpVoice.Refiner;
 /// <summary>A fixed public probe; independent model events and no dictation state.</summary>
 public sealed class ConnectionTester(HttpClient http, IChatGptSessionProvider auth, GeminiApiClient? geminiApi = null)
 {
-    public async Task<ConnectionTestResult> TestAsync(string backend, string model, CancellationToken ct)
+    public Task<ConnectionTestResult> TestAsync(string backend, string model, CancellationToken ct)
+        => backend is "chatgpt_oauth" or "gemini_api"
+            ? ProviderOperation.RunAsync(backend == "gemini_api" ? ProviderOperationKind.GeminiInference : ProviderOperationKind.ChatGptInference,
+                token => TestCoreAsync(backend, model, token), ct, TimeSpan.FromSeconds(60))
+            : TestCoreAsync(backend, model, ct);
+
+    private async Task<ConnectionTestResult> TestCoreAsync(string backend, string model, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         if (backend == "none") throw new InvalidOperationException("Choose an AI provider before testing a connection.");

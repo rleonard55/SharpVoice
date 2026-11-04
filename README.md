@@ -84,7 +84,9 @@ Installed releases check GitHub for updates. In **General → Updates**, turn au
 | [Wake diagnostics](docs/wake-diagnostics.md) | Guided tests and log export |
 | [Known gaps and verification](docs/spec-completion.md) | [Test evidence](docs/verification.md) and [Windows smoke tests](docs/windows-smoke-test.md) |
 
-Found a problem? [Open an issue](https://github.com/rleonard55/SharpVoice/issues) with your Windows version, speech model, provider, and steps to reproduce. Remove private text, credentials, and account details from logs and screenshots before sharing.
+Found a provider connection problem? Open **AI & Models → Diagnostics** for an explanation and sanitized report preview. **Copy Report** copies that snapshot; **Open GitHub Issue** opens a form where you can paste, review and submit it yourself. Nothing is uploaded automatically. Reports stay in memory until cleared or exit; public issues are public and linked to your GitHub account. You can send the report privately to IT instead. See [diagnostic privacy and corporate-network troubleshooting](docs/privacy.md).
+
+For other problems, [open an issue](https://github.com/rleonard55/SharpVoice/issues) with reproduction steps. Remove private text, credentials and account details from anything you share.
 
 ## License
 

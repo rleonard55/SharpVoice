@@ -181,3 +181,12 @@ If ChatGPT reports that a model is unavailable, choose `auto` and Apply, then re
 
 ChatGPT access/refresh tokens are stored in `%USERPROFILE%\.sharpvoice\session.json` as a **DPAPI-encrypted binary blob** (despite the spec's filename). Only the current Windows user can decrypt it. The app creates its own session and does not read Codex/ChatGPT application credentials. Refresh is serialized and runs five minutes before expiry on a one-minute check, with an additional check before requests. Non-secret settings are source-generated JSON in `%USERPROFILE%\.sharpvoice\config.json`; models live in its `models` subfolder. SharpVoice conversations stay in memory until exit. Dictation history is also in memory by default; Recent Dictations can optionally save encrypted history locally. Text explicitly inserted or copied is handled by the destination app or clipboard. The optional Google Antigravity runtime can additionally persist its own conversations/history as described above. The optional Claude Code backend runs with session persistence and prompt history disabled; Anthropic’s own runtime diagnostics and service retention policies also apply.
 
+
+
+## Provider diagnostics and voluntary reports
+
+When sign-in succeeds but AI requests fail, use **AI & Models → Test Connection**, then **Diagnostics**. The window explains the latest failure and previews up to 20 recent failures, including whether token exchange/refresh, model discovery, or inference failed. It distinguishes DNS, TLS, proxy, HTTP, timeout, invalid responses and interrupted streams where evidence is available. It does not identify a firewall as the cause without evidence.
+
+The report is memory-only and excludes private text, credentials, internal hostnames and raw logs. Reopen to refresh its snapshot; Clear or exit discards the in-app records. Copy Report explicitly copies exactly the displayed snapshot. Clear does not erase clipboard history or reports already shared.
+
+Open GitHub Issue opens a fixed issue form without sending the report. Paste, review and submit there yourself. Public reports are associated with your GitHub account; sanitized does not mean anonymous. You can share with IT privately instead. See [privacy, included fields and TLS-inspection troubleshooting](privacy.md).

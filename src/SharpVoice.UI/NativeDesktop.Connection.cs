@@ -19,6 +19,7 @@ public sealed partial class NativeDesktop
     private void RefreshConnectionTestControls()
     {
         if (connectionTestButton == 0) return;
+        Win32.EnableWindow(Win32.GetDlgItem(settingsWindow, 123), active ? 0 : 1);
         var backend = SelectedChoice("Backend");
         var authBusy = IsAuthenticationBusy?.Invoke() == true;
         if ((connectionBackend.Length != 0 && (connectionBackend != backend || connectionModel != SelectedModelId())) || authBusy || active)
@@ -70,7 +71,8 @@ public sealed partial class NativeDesktop
         connectionBackend = backend; connectionModel = model;
         connectionMessage = "Testing Connection…"; connectionResultState = 0;
         var request = ++connectionGeneration;
-        var owner = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        // Remote tests own their deadline through response reading, keeping timeout distinct from user cancellation.
+        var owner = backend is "chatgpt_oauth" or "gemini_api" ? new CancellationTokenSource() : new CancellationTokenSource(TimeSpan.FromSeconds(60));
         connectionCancellation = owner;
         RefreshConnectionTestControls();
         Task<ConnectionTestResult> task;
@@ -86,7 +88,7 @@ public sealed partial class NativeDesktop
         catch (OperationCanceledException) { failure = "The test timed out. Check your network or provider, then retry."; }
         catch (Exception ex)
         {
-            failure = ex is InvalidOperationException or InvalidDataException ? ex.Message
+            failure = ex is InvalidOperationException or InvalidDataException or ProviderStreamException ? ex.Message
                 : ex is ArgumentException ? "Choose a valid AI provider and model, then retry."
                 : "Could not reach the AI provider. Check your network and sign-in, then retry.";
             failure = failure.Replace("chatgpt_oauth", "ChatGPT", StringComparison.Ordinal).Replace(" The transcript is retained in the preview.", "", StringComparison.Ordinal)
@@ -119,8 +121,12 @@ public sealed partial class NativeDesktop
     }
     internal bool HandleConnectionInput(in Win32.Msg message)
     {
-        if (message.Hwnd != connectionTestButton || message.Message is not (0x100 or 0x101) || message.WParam is not (13 or 32)) return false;
-        if (message.Message == 0x100 && ((long)message.LParam & (1L << 30)) == 0) RequestConnectionTest();
+        if ((message.Hwnd != connectionTestButton && message.Hwnd != Win32.GetDlgItem(settingsWindow, 123)) || message.Message is not (0x100 or 0x101) || message.WParam is not (13 or 32)) return false;
+        if (message.Message == 0x100 && ((long)message.LParam & (1L << 30)) == 0)
+        {
+            if (message.Hwnd == connectionTestButton) RequestConnectionTest();
+            else OpenProviderDiagnostics();
+        }
         return true;
     }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]

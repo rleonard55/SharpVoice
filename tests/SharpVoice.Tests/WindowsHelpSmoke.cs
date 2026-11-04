@@ -5,7 +5,7 @@ using SharpVoice.UI;
 
 internal static partial class WindowsHelpSmoke
 {
-    public static void Run(string? output = null, bool connectedOnly = false, bool geminiOnly = false, bool turnaroundOnly = false)
+    public static void Run(string? output = null, bool connectedOnly = false, bool geminiOnly = false, bool turnaroundOnly = false, bool diagnosticsOnly = false)
     {
         var isolated = CreateDesktopW("SharpVoiceHelpCheck" + Guid.NewGuid().ToString("N"), 0, 0, 0, 0x10000000, 0);
         if (isolated == 0) throw new Exception("Cannot create isolated help-check desktop.");
@@ -16,10 +16,11 @@ internal static partial class WindowsHelpSmoke
             {
                 if (SetThreadDesktop(isolated) == 0) throw new Exception("Cannot enter isolated help-check desktop.");
                 var palette = ThemeColors.DarkTheme;
-                using var desktop = new NativeDesktop(new AppConfig { Backend = "chatgpt_oauth" }, () => palette);
+                var diagnosticActions = new DiagnosticActionsFixture();
+                using var desktop = new NativeDesktop(new AppConfig { Backend = "chatgpt_oauth" }, () => palette, copyDiagnostics: diagnosticActions.Copy, openDiagnosticsUrl: diagnosticActions.Open);
                 desktop.Initialize(showSettings: false, integrateShell: false);
                 if (Win32.GetDlgItem(desktop.SettingsHandle, 113) == 0) throw new Exception("Local models have no Download Model action.");
-                if(turnaroundOnly)CheckTurnaround(desktop,next=>palette=next,output);else if(geminiOnly)CheckGeminiApi(desktop,next=>palette=next,output);else if(connectedOnly)CheckConnected(desktop, next=>palette=next, output);else CheckHelp(desktop, next => palette = next, output);
+                if(diagnosticsOnly)CheckDiagnostics(desktop,next=>palette=next,output,diagnosticActions);else if(turnaroundOnly)CheckTurnaround(desktop,next=>palette=next,output);else if(geminiOnly)CheckGeminiApi(desktop,next=>palette=next,output);else if(connectedOnly)CheckConnected(desktop, next=>palette=next, output);else CheckHelp(desktop, next => palette = next, output, diagnosticActions);
             }
             catch (Exception ex) { failure = System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex); }
         });
@@ -27,8 +28,9 @@ internal static partial class WindowsHelpSmoke
         Console.WriteLine("PASS native on-demand Settings help, hover/click/keyboard, dismissal, dynamic content and OS themes on an isolated desktop.");
     }
 
-    private static unsafe void CheckHelp(NativeDesktop desktop, Action<ThemeColors> changeTheme, string? output)
+    private static unsafe void CheckHelp(NativeDesktop desktop, Action<ThemeColors> changeTheme, string? output, DiagnosticActionsFixture diagnosticActions)
     {
+        CheckDiagnostics(desktop, changeTheme, output, diagnosticActions);
         CheckUpdates(desktop, changeTheme, output);
         static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
         var window = desktop.SettingsHandle;

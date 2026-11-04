@@ -150,10 +150,13 @@ public sealed class ChatGptAuthManager : IChatGptSessionProvider, IDisposable
         finally { gate.Release(); }
     }
 
-    private async Task<ChatGptSession> ExchangeAsync(Dictionary<string, string> fields, ChatGptSession? previous, CancellationToken ct)
+    private Task<ChatGptSession> ExchangeAsync(Dictionary<string, string> fields, ChatGptSession? previous, CancellationToken ct)
+        => ProviderOperation.RunAsync(previous is null ? ProviderOperationKind.ChatGptSignIn : ProviderOperationKind.ChatGptRefresh, token => ExchangeCoreAsync(fields, previous, token), ct, TimeSpan.FromSeconds(60));
+
+    private async Task<ChatGptSession> ExchangeCoreAsync(Dictionary<string, string> fields, ChatGptSession? previous, CancellationToken ct)
     {
         using var response = await http.PostAsync("https://auth.openai.com/oauth/token", new FormUrlEncodedContent(fields), ct);
-        if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"ChatGPT authorization failed (HTTP {(int)response.StatusCode}). Try signing in again.");
+        if (!response.IsSuccessStatusCode) throw new ProviderHttpException(response.StatusCode);
         var bytes = await response.Content.ReadAsByteArrayAsync(ct);
         try
         {

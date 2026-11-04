@@ -15,6 +15,9 @@ using SharpVoice.UI;
 if (args is ["--turnaround-whisper-benchmark", var turnaroundModel, var turnaroundWav]) { await TurnaroundChecks.Benchmark(turnaroundModel, turnaroundWav); return 0; }
 if (args is ["--turnaround-config-check"]) { await TurnaroundChecks.Preferences(); return 0; }
 if (args is ["--updates-check"]) { await ReleaseUpdateChecks.Preferences(); await ReleaseUpdateChecks.Policy(); await ReleaseUpdateChecks.Cancellation(); return 0; }
+if (args is ["--windows-provider-diagnostics-smoke", var providerOutput]) { WindowsHelpSmoke.Run(providerOutput, diagnosticsOnly: true); return 0; }
+if (args is ["--provider-rejection-check"]) { await ProviderDiagnosticChecks.RejectionGuidance(); return 0; }
+if (args is ["--provider-diagnostics-check"]) { await ProviderDiagnosticChecks.All(); return 0; }
 if (args is ["--gemini-api-config-check"]) { await GeminiApiChecks.Configuration(); return 0; }
 if (args is ["--wake-native", var wakeModel, var wakeWav, var wakeDictate, var wakeAsk]) { await WakeDetectorChecks.Native(wakeModel, wakeWav, wakeDictate, wakeAsk); return 0; }
 if (args is ["--whisper-wake-clips", var vadPath, var selectedWhisper, var clipsDirectory]) { await WakeWhisperChecks.NativeClips(vadPath, selectedWhisper, clipsDirectory); return 0; }
@@ -463,6 +466,16 @@ if (args is ["--whisper-smoke", var modelPath, var wavPath])
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("Provider diagnostics explain TLS without leaking exception text", ProviderDiagnosticChecks.TlsExplanation),
+    ("Provider diagnostics retain only bounded allowlisted fields", ProviderDiagnosticChecks.JournalPrivacy),
+    ("Provider diagnostics classify network errors without duplicate records", ProviderDiagnosticChecks.Categories),
+    ("HTML responses are distinguished from truncated SSE", ProviderDiagnosticChecks.ResponseMeaning),
+    ("Provider rejections retain fixed actionable guidance", ProviderDiagnosticChecks.RejectionGuidance),
+    ("Nested deadlines preserve the active provider operation", ProviderDiagnosticChecks.NestedDeadline),
+    ("Token refresh failures have sanitized diagnostics", OAuthCallbackChecks.Diagnostics),
+    ("Provider deadlines differ from caller cancellation", ProviderDiagnosticChecks.Lifetimes),
+    ("ChatGPT catalog and inference failures have safe stage attribution", ProviderDiagnosticChecks.ChatGptIntegration),
+    ("Gemini HTTP and response-body failures have safe diagnostics", ProviderDiagnosticChecks.GeminiIntegration),
     ("Whisper wake matches only complete prefixes and prioritizes dictation", WakeWhisperChecks.Prefix),
     ("Whisper wake performs no inference during silence and activates once", WakeWhisperChecks.Silence),
     ("Whisper wake tracks speech ending independently and cancels background inference", WakeWhisperChecks.SlowInference),

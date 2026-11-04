@@ -96,7 +96,12 @@ public sealed class UnifiedRefiner(HttpClient http, IChatGptSessionProvider auth
     private string? resolvedAccount;
     private DateTimeOffset catalogExpires;
 
-    public async Task<string> RefineAsync(string transcript, string processName, AppConfig config, Action<string> preview, CancellationToken ct, string? sourceText = null, bool askAi = false, bool allowModelDownload = true, bool forceCleanup = false, EditorRequest? editorRequest = null, bool smartAsk = false, ConnectedPrompt? connectedPrompt = null, AnswerConversation? answerConversation = null)
+    public Task<string> RefineAsync(string transcript, string processName, AppConfig config, Action<string> preview, CancellationToken ct, string? sourceText = null, bool askAi = false, bool allowModelDownload = true, bool forceCleanup = false, EditorRequest? editorRequest = null, bool smartAsk = false, ConnectedPrompt? connectedPrompt = null, AnswerConversation? answerConversation = null)
+        => config.Backend == "chatgpt_oauth"
+            ? ProviderOperation.RunAsync(ProviderOperationKind.ChatGptInference, token => RefineCoreAsync(transcript, processName, config, preview, token, sourceText, askAi, allowModelDownload, forceCleanup, editorRequest, smartAsk, connectedPrompt, answerConversation), ct)
+            : RefineCoreAsync(transcript, processName, config, preview, ct, sourceText, askAi, allowModelDownload, forceCleanup, editorRequest, smartAsk, connectedPrompt, answerConversation);
+
+    private async Task<string> RefineCoreAsync(string transcript, string processName, AppConfig config, Action<string> preview, CancellationToken ct, string? sourceText = null, bool askAi = false, bool allowModelDownload = true, bool forceCleanup = false, EditorRequest? editorRequest = null, bool smartAsk = false, ConnectedPrompt? connectedPrompt = null, AnswerConversation? answerConversation = null)
     {
         if (string.IsNullOrWhiteSpace(transcript)) return "";
         var editing = !askAi && !string.IsNullOrEmpty(sourceText);
@@ -157,10 +162,12 @@ public sealed class UnifiedRefiner(HttpClient http, IChatGptSessionProvider auth
             if (config.Backend == "chatgpt_oauth" && await IsUnavailableModelAsync(response, ct))
             {
                 cachedModels = null;
-                throw new InvalidOperationException("ChatGPT rejected the selected model for this account. Set AI model to auto in Settings and Apply, then retry. The raw transcript is retained; nothing was inserted.");
+                throw new ProviderHttpException(response.StatusCode, "ChatGPT rejected the selected model for this account. Set AI model to auto in Settings and Apply, then retry.");
             }
-            throw new InvalidOperationException($"{config.Backend} returned HTTP {(int)response.StatusCode}. Check sign-in, model availability and account access. The transcript is retained in the preview.");
+            throw new ProviderHttpException(response.StatusCode);
         }
+        if (response.Content.Headers.ContentType?.MediaType is { } mediaType && !mediaType.Equals("text/event-stream", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Expected a streaming response.");
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         var text = new StringBuilder();
         var completed = false;
@@ -169,7 +176,7 @@ public sealed class UnifiedRefiner(HttpClient http, IChatGptSessionProvider auth
             if (data == "[DONE]") break;
             using var document = JsonDocument.Parse(data);
             var root = document.RootElement;
-            if (root.TryGetProperty("error", out _)) throw new InvalidDataException("Refinement service reported an error.");
+            if (root.TryGetProperty("error", out _)) throw ProviderOperation.RejectedAnswer();
             if (config.Backend == "chatgpt_oauth")
             {
                 var type = root.TryGetProperty("type", out var t) ? t.GetString() : "";
@@ -177,7 +184,7 @@ public sealed class UnifiedRefiner(HttpClient http, IChatGptSessionProvider auth
                     && root.TryGetProperty("response", out var metadata) && metadata.ValueKind == JsonValueKind.Object
                     && metadata.TryGetProperty("model", out var actualModel) && actualModel.ValueKind == JsonValueKind.String
                     && !string.IsNullOrWhiteSpace(actualModel.GetString())) ModelResolved?.Invoke(actualModel.GetString()!);
-                if (type is "response.failed" or "response.incomplete" or "error") throw new InvalidDataException("ChatGPT could not complete the refinement. The transcript is retained.");
+                if (type is "response.failed" or "response.incomplete" or "error") throw ProviderOperation.RejectedAnswer();
                 if (type == "response.output_text.delta" && root.TryGetProperty("delta", out var delta)) text.Append(delta.GetString());
                 if (type == "response.completed") { completed = true; break; }
             }
@@ -201,7 +208,10 @@ public sealed class UnifiedRefiner(HttpClient http, IChatGptSessionProvider auth
         return selected ?? throw new InvalidOperationException("ChatGPT returned no available models for this account. Check the account's Codex access or choose local transcription in Settings. The transcript is retained.");
     }
 
-    private async Task<IReadOnlyList<ModelChoice>> GetModelsAsync(ChatGptSession session, CancellationToken ct)
+    private Task<IReadOnlyList<ModelChoice>> GetModelsAsync(ChatGptSession session, CancellationToken ct)
+        => ProviderOperation.RunAsync(ProviderOperationKind.ChatGptModels, token => GetModelsCoreAsync(session, token), ct);
+
+    private async Task<IReadOnlyList<ModelChoice>> GetModelsCoreAsync(ChatGptSession session, CancellationToken ct)
     {
         await catalogGate.WaitAsync(ct);
         try
@@ -213,7 +223,7 @@ public sealed class UnifiedRefiner(HttpClient http, IChatGptSessionProvider auth
             request.Headers.TryAddWithoutValidation("originator", "sharpvoice");
             if (session.AccountId.Length != 0) request.Headers.TryAddWithoutValidation("ChatGPT-Account-ID", session.AccountId);
             using var response = await http.SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"Could not load ChatGPT's available models (HTTP {(int)response.StatusCode}). Try signing in again or enter an available AI model in Settings.");
+            if (!response.IsSuccessStatusCode) throw new ProviderHttpException(response.StatusCode);
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
             using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
             var models = ModelCatalog.Parse(document.RootElement);

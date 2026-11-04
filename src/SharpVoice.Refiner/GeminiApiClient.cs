@@ -16,7 +16,10 @@ public sealed class GeminiApiClient
     public GeminiApiClient() : this(SharedHttp, new GeminiApiKeyStore().Load) { }
     public GeminiApiClient(HttpClient http, Func<string> readKey) => (this.http, this.readKey) = (http, readKey);
 
-    public async Task<string> RefineAsync(string input, string instructions, string selected, Action<string> preview, Action<string> resolved, CancellationToken ct)
+    public Task<string> RefineAsync(string input, string instructions, string selected, Action<string> preview, Action<string> resolved, CancellationToken ct)
+        => ProviderOperation.RunAsync(ProviderOperationKind.GeminiInference, token => RefineCoreAsync(input, instructions, selected, preview, resolved, token), ct);
+
+    private async Task<string> RefineCoreAsync(string input, string instructions, string selected, Action<string> preview, Action<string> resolved, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var model = selected == "auto" ? DefaultModel : selected;
@@ -39,13 +42,7 @@ public sealed class GeminiApiClient
         try
         {
             using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode) throw new InvalidOperationException(response.StatusCode switch
-            {
-                HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => "Google AI Studio rejected the request. Check the API key, its Generative Language API permissions, model access and region.",
-                HttpStatusCode.NotFound => "This Gemini API model is unavailable. Choose Auto or an exact model ID available in your AI Studio project.",
-                HttpStatusCode.TooManyRequests => "Google AI Studio quota or rate limit reached. Check your project's quota/billing or retry later.",
-                _ => $"Google AI Studio returned HTTP {(int)response.StatusCode}. Try again later. Nothing was inserted."
-            });
+            if (!response.IsSuccessStatusCode) throw new ProviderHttpException(response.StatusCode);
             using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
             using var bytes = new MemoryStream(); var buffer = new byte[8192]; int count;
             while ((count = await stream.ReadAsync(buffer.AsMemory(), ct).ConfigureAwait(false)) != 0)
@@ -56,10 +53,10 @@ public sealed class GeminiApiClient
             using var json = JsonDocument.Parse(bytes.ToArray(), new JsonDocumentOptions { MaxDepth = 32 });
             var root = json.RootElement;
             if (!root.TryGetProperty("candidates", out var candidates) || candidates.ValueKind != JsonValueKind.Array || candidates.GetArrayLength() != 1)
-                throw new InvalidDataException("Gemini returned no complete answer; the request may have been blocked. Nothing was inserted.");
+                throw ProviderOperation.RejectedAnswer();
             var candidate = candidates[0];
             var reason = candidate.TryGetProperty("finishReason", out var finish) && finish.ValueKind == JsonValueKind.String ? finish.GetString() : "";
-            if (reason != "STOP") throw new InvalidDataException(reason == "MAX_TOKENS" ? "Gemini reached its output limit. Shorten the request and retry; partial text was not inserted." : "Gemini did not complete the answer or blocked the request. Nothing was inserted.");
+            if (reason != "STOP") throw ProviderOperation.RejectedAnswer(reason == "MAX_TOKENS");
             if (!candidate.TryGetProperty("content", out var content) || !content.TryGetProperty("parts", out var parts) || parts.ValueKind != JsonValueKind.Array)
                 throw new InvalidDataException("Gemini returned no answer text. Nothing was inserted.");
             var text = new StringBuilder();
@@ -76,7 +73,6 @@ public sealed class GeminiApiClient
             resolved(actual is { Length: > 0 and <= 200 } && actual.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '.' or '_') ? actual : model);
             preview(answer); return answer;
         }
-        catch (HttpRequestException) { throw new InvalidOperationException("Could not reach Google AI Studio. Check your connection and retry."); }
         catch (JsonException) { throw new InvalidDataException("Gemini returned an invalid or incomplete response. Nothing was inserted."); }
         catch (InvalidOperationException ex) when (ex.Source == "System.Text.Json") { throw new InvalidDataException("Gemini returned an invalid response. Nothing was inserted."); }
     }

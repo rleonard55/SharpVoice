@@ -170,6 +170,21 @@ internal static class OAuthCallbackChecks
     }
 
     private static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
+    public static async Task Diagnostics()
+    {
+        SharpVoice.Core.ProviderDiagnostics.Shared.Clear();
+        var calls = 0;
+        using var fixture = new Fixture(_ => Task.FromResult(new HttpResponseMessage(++calls == 1 ? HttpStatusCode.OK : HttpStatusCode.Unauthorized)
+        { Content = new StringContent(calls == 1 ? Tokens.Replace("3600", "1") : "PRIVATE_TOKEN_ERROR") }));
+        var signingIn = fixture.Auth.SignInAsync(fixture.Timeout.Token);
+        using var response = await fixture.Browser.GetAsync(await fixture.CallbackAsync());
+        await signingIn;
+        try { await fixture.Auth.GetSessionAsync(fixture.Timeout.Token); throw new Exception("Refresh denial was accepted."); }
+        catch (SharpVoice.Refiner.ProviderFailureException) { }
+        Check(SharpVoice.Core.ProviderDiagnostics.Shared.Snapshot() is [{ Operation: SharpVoice.Core.ProviderOperationKind.ChatGptRefresh, HttpStatus: 401 }], "Refresh failure has no sanitized stage attribution.");
+        Check(!SharpVoice.Core.ProviderDiagnostics.Shared.Report().Contains("PRIVATE_TOKEN_ERROR"), "Token response leaked into diagnostics.");
+    }
+
     private sealed class Fixture : IDisposable
     {
         private TcpListener? listener;

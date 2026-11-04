@@ -67,7 +67,7 @@ internal static class RefinementThresholdChecks
         using var http = new HttpClient(new StubHandler(_ =>
         {
             calls++;
-            return new(HttpStatusCode.OK) { Content = new StringContent("data: {\"type\":\"response.output_text.delta\",\"delta\":\"Refined.\"}\n\ndata: {\"type\":\"response.completed\"}\n\n") };
+            return new(HttpStatusCode.OK) { Content = new StringContent("data: {\"type\":\"response.output_text.delta\",\"delta\":\"Refined.\"}\n\ndata: {\"type\":\"response.completed\"}\n\n", Encoding.UTF8, "text/event-stream") };
         }));
         var refiner = new UnifiedRefiner(http, new FixtureSessionProvider());
         var config = new AppConfig { Backend = "chatgpt_oauth", RefinementModel = "fixture-model" };
