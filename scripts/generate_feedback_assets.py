@@ -51,9 +51,16 @@ def chime(name, notes):
         target.writeframes(struct.pack(f"<{len(samples)}h", *samples))
 
 
+# Generate the question cue alone without changing reviewed sounds.
+if "--only-follow-up-question" in sys.argv:
+    chime("follow-up-question", ((784, .085), (0, .065), (1174.66, .12)))
+    print("Generated distinct follow-up question cue.")
+    raise SystemExit(0)
+
 chime("recording-start", ((660, .055), (0, .01), (880, .065)))
 chime("recording-stop", ((660, .055), (0, .01), (440, .065)))
 chime("warning", ((330, .07), (0, .03), (330, .07)))
 insertion_success()
+chime("follow-up-question", ((784, .085), (0, .065), (1174.66, .12)))
 
 print("Generated recording, warning and insertion-success PCM cues; branded icons are preserved.")

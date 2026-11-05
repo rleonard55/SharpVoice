@@ -18,6 +18,8 @@ public sealed record AppConfig
     public bool FastTranscription { get; init; }
     public bool LiveTranscription { get; init; } = true;
     public bool SmartAsk { get; init; }
+    public bool AnswerSpeechEnabled { get; init; } = true;
+    public string AnswerVerbosity { get; init; } = "brief";
     public string AnswerVoice { get; init; } = "en-US-AriaNeural";
     public string SpeechModel { get; init; } = "tiny.en-q5_1";
     public string Language { get; init; } = "en";
@@ -83,6 +85,7 @@ public sealed record AppConfig
         && FastTranscription == other.FastTranscription
         && LiveTranscription == other.LiveTranscription
         && SmartAsk == other.SmartAsk && AnswerVoice == other.AnswerVoice
+        && AnswerSpeechEnabled == other.AnswerSpeechEnabled && AnswerVerbosity == other.AnswerVerbosity
         && Dictionary.SequenceEqual(other.Dictionary) && Snippets.SequenceEqual(other.Snippets) && Profiles.SequenceEqual(other.Profiles);
     public override int GetHashCode() => HashCode.Combine(SpeechModel, Backend, RefinementModel, Hotkey, AskHotkey, Mode, RecordingGesture, PersistHistory);
 
@@ -92,6 +95,7 @@ public sealed record AppConfig
         WritingTools.Validate(this);
         WakePhrases.Validate(this);
         if (ConnectedCodexPath is null || ConnectedCodexPath.Length > 4096 || ConnectedTools is null || ConnectedTools.Length > MaximumConnectedTools || ConnectedTools.Any(x => x is null || x.Length > 512 || !x.Contains("::", StringComparison.Ordinal)) || ConnectedTools.Distinct(StringComparer.Ordinal).Count() != ConnectedTools.Length) throw new ArgumentException($"Choose at most {MaximumConnectedTools} distinct connected tools and a valid Codex location.");
+        if (AnswerVerbosity is not ("brief" or "conversational" or "detailed")) throw new ArgumentException("Choose Brief, Conversational or Detailed answers.");
         if (!AnswerVoices.All.Contains(AnswerVoice)) throw new ArgumentException("Choose a supported spoken-answer voice.");
         if (!SpeechModels.All.Contains(SpeechModel)) throw new ArgumentException("Choose a supported Whisper model from the list.");
         if (string.IsNullOrWhiteSpace(Language)) throw new ArgumentException("Language cannot be empty.");
@@ -152,6 +156,8 @@ public static class ConfigManager
             // Preserve old dictation choices that contain the new default Ask chord.
             Dictionary = config.Dictionary ?? [], Snippets = config.Snippets ?? [], Profiles = config.Profiles ?? [],
             ConnectedTools = config.ConnectedTools ?? [], ConnectedCodexPath = config.ConnectedCodexPath ?? "",
+            AnswerSpeechEnabled = document.RootElement.TryGetProperty("answer_speech_enabled", out _) ? config.AnswerSpeechEnabled : true,
+            AnswerVerbosity = document.RootElement.TryGetProperty("answer_verbosity", out _) ? config.AnswerVerbosity : "brief",
             AnswerVoice = string.IsNullOrWhiteSpace(config.AnswerVoice) ? "en-US-AriaNeural" : config.AnswerVoice,
             RecordingGesture = document.RootElement.TryGetProperty("recording_gesture", out _) ? config.RecordingGesture : "hold",
             LiveTranscription = document.RootElement.TryGetProperty("live_transcription", out _) ? config.LiveTranscription : true,

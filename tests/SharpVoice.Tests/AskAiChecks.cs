@@ -7,6 +7,46 @@ using SharpVoice.Refiner.Auth;
 
 internal static class AskAiChecks
 {
+    public static async Task StructuredQuestions()
+    {
+        var calls = 0;
+        using var http = new HttpClient(new Handler(async request =>
+        {
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+            var prompt = body.RootElement.GetProperty("instructions").GetString()!;
+            Check(prompt.Contains("kind, text, choices") && prompt.EndsWith("inside that envelope.", StringComparison.Ordinal) && !prompt.Contains("without a JSON envelope"), "Plugin Ask did not request structured questions.");
+            using var input = JsonDocument.Parse(body.RootElement.GetProperty("input")[0].GetProperty("content").GetString()!);
+            Check(input.RootElement.GetProperty("source_text").GetString() == "Original code", "Question context was lost.");
+            calls++; return Response("""{"kind":"clarify","text":"Which style?","choices":["Compact","Expanded"]}""");
+        }));
+        var conversation = AnswerConversation.Start("Explain", "Which language?", "Original code");
+        var result = await conversation.ReplyStructuredAsync(new UnifiedRefiner(http, new Sessions()), "C#", "code", Config(), default);
+        Check(calls == 1 && result.Kind == "clarify" && result.Choices.SequenceEqual(new[] { "Compact", "Expanded" }), "Structured provider choices did not reach the plugin.");
+        Check(conversation.SystemInstructions == AnswerConversation.Instructions, "Structured call mutated ordinary desktop popup behavior.");
+    }
+    public static async Task EditorContextRequests()
+    {
+        var selected = "const answer = 42;";
+        var context = EditorChecks.Context() with { Name = "test2.js", Language = "javascript", SourceText = selected, ContextText = "before\n" + selected + "\nafter", Start = 0, End = selected.Length, TargetKind = "selection", CursorOffset = null };
+        var view = new ConversationStore().Active(new("editor_ask", "fixture", "test"));
+        foreach (var includeFile in new[] { false, true })
+        {
+            using var http = new HttpClient(new Handler(async request =>
+            {
+                using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+                using var input = JsonDocument.Parse(body.RootElement.GetProperty("input")[0].GetProperty("content").GetString()!);
+                var root = input.RootElement; var editor = root.GetProperty("editor_context");
+                Check(editor.GetProperty("filename").GetString() == "test2.js" && editor.GetProperty("extension").GetString() == ".js" && editor.GetProperty("language").GetString() == "javascript", "File identity did not reach the Ask provider.");
+                Check(editor.GetProperty("selected_text").GetString() == selected, "Highlighted code did not reach the Ask provider.");
+                Check(root.GetProperty("source_text").GetString() == (includeFile ? "before\nconst answer = 42;\nafter" : selected), "Ask ignored the explicit additional-file-context setting.");
+                return Response("""{"kind":"answer","text":"It assigns 42.","choices":[]}""");
+            }));
+            var result = await AnswerConversation.FromEditor(view, context, includeFile).ReplyStructuredAsync(new UnifiedRefiner(http, new Sessions()), "Explain", "code", Config(), default);
+            Check(result.Text == "It assigns 42.", "Read-only contextual Ask answer was lost.");
+        }
+        using var metadata = JsonDocument.Parse(AnswerConversation.FromEditor(view, context with { SourceText = "", ContextText = "", Start = 0, End = 0, TargetKind = "cursor", CursorOffset = 0 }, false).Input("Which language?"));
+        Check(metadata.RootElement.GetProperty("editor_context").GetProperty("filename").GetString() == "test2.js" && metadata.RootElement.GetProperty("source_text").GetString() == "", "Filename-only Ask leaked unselected source.");
+    }
     public static async Task Requests()
     {
         var fixtures = new[]

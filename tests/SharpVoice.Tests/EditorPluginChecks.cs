@@ -22,7 +22,7 @@ internal static class EditorPluginChecks
     public static async Task Install()
     {
         using var fixture = new Fixture();
-        var installed = false; var calls = new List<ProcessStartInfo>();
+        string? installedVersion = null; var calls = new List<ProcessStartInfo>();
         var plugins = new EditorPlugins(_ => fixture.Executable, (start, ct) =>
         {
             ct.ThrowIfCancellationRequested(); calls.Add(start);
@@ -35,11 +35,11 @@ internal static class EditorPluginChecks
                 using var json = System.Text.Json.JsonDocument.Parse(zip.GetEntry("extension/package.json")!.Open());
                 if (json.RootElement.GetProperty("name").GetString() != "sharpvoice-vscode" || json.RootElement.GetProperty("publisher").GetString() != "sharpvoice") throw new Exception("Wrong bundled plugin.");
                 if (start.ArgumentList.Contains("--force")) throw new Exception("Forced installation can downgrade the plugin.");
-                installed = true;
+                installedVersion = json.RootElement.GetProperty("version").GetString();
                 return Task.FromResult(new EditorPluginCommandResult(0, "Installed"));
             }
             if (!start.ArgumentList.Contains("--list-extensions") || !start.ArgumentList.Contains("--show-versions")) throw new Exception("Status did not query the editor.");
-            return Task.FromResult(new EditorPluginCommandResult(0, installed ? "unrelated.extension@9.0\nsharpvoice.sharpvoice-vscode@0.2.0\n" : "unrelated.extension@9.0\n"));
+            return Task.FromResult(new EditorPluginCommandResult(0, installedVersion is not null ? $"unrelated.extension@9.0\nsharpvoice.sharpvoice-vscode@{installedVersion}\n" : "unrelated.extension@9.0\n"));
         });
         var before = await plugins.GetStatusAsync("vscode", default);
         if (before.Executable != fixture.Executable || before.InstalledVersion is not null || !before.CanInstall || before.Action != "Install") throw new Exception("Detected editor did not offer installation.");

@@ -7,6 +7,7 @@ public sealed class EditorSession
     public string Mode { get; private set; } = "";
     public EditorContext? Context { get; private set; }
     public string State { get; private set; } = "idle";
+    public string ProposalKind { get; private set; } = "";
     public string Instruction { get; set; } = "";
     public int Rounds { get; private set; }
     private DateTimeOffset started;
@@ -19,7 +20,7 @@ public sealed class EditorSession
         Id = id; Mode = mode; Context = context; State = "recording"; started = now; Rounds = 0; Instruction = "";
     }
     public void Processing(string id) { Require(id, "recording"); State = "processing"; }
-    public void Propose(string id, EditorResult result) { Require(id, "processing"); State = result.Kind == "clarify" ? "clarify" : "proposal"; }
+    public void Propose(string id, EditorResult result) { Require(id, "processing"); ProposalKind = result.Kind; State = result.Kind == "clarify" ? "clarify" : "proposal"; }
     public void BeginClarification(string id, EditorContext? context = null)
     {
         Require(id, "clarify");
@@ -40,6 +41,6 @@ public sealed class EditorSession
     public bool CanApply(string id) => id == Id && State == "proposal";
     public bool IsExpired(DateTimeOffset now) => Busy && now - started > TimeSpan.FromMinutes(5);
     public void Complete(string id) { if (id != Id || State is not ("proposal" or "applying")) throw new InvalidOperationException("This edit receipt is stale."); Cancel(); }
-    public void Cancel() { Id = Mode = Instruction = ""; Context = null; State = "idle"; }
+    public void Cancel() { Id = Mode = Instruction = ProposalKind = ""; Context = null; State = "idle"; }
     private void Require(string id, string state) { if (id != Id || State != state) throw new InvalidOperationException("This editor request is stale or in the wrong state."); }
 }

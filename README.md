@@ -35,8 +35,8 @@ Requires **Windows 10/11 x64** and an **AVX2/FMA-capable CPU**. No separate .NET
 | **Dictate into an app** | Hold **Ctrl + Alt**. Local Whisper turns speech into text; optional AI cleans up longer dictation. |
 | **Rewrite selected text** | Select text, hold **Ctrl + Alt**, and describe the change. An AI provider is required. |
 | **Ask AI** | Hold **Ctrl + Alt + Shift** and ask a question or request content. Choose a provider in **AI & Models** first. |
-| **Hear an answer and follow up** | Enable **General → Smart Ask AI**. Questions open an answer popup with readout, voice replies, and a text fallback. |
-| **Write or refactor code** | Install the VS Code plugin from **General → Plugins**. Speak or type a request, review the diff, then Apply. |
+| **Hear an answer and follow up** | Enable **General → Smart Ask AI**. Questions open an answer popup with optional readout, voice replies, and a text fallback. Choose **Read Answers Aloud** and **Response Length** separately; the popup’s speech toggle remembers your choice. Click outside to dismiss it and stop speech. |
+| **Write or refactor code** | Install the VS Code plugin from **General → Plugins**. In foreground VS Code, your configured **Dictation** shortcut uses the current file/selection. Speak to update the working file inline; continue making changes, then Accept All or Revert All. The Ask AI shortcut opens read-only questions in the plugin, with optional current-file context. |
 | **Make it your own** | Set custom shortcuts, prompts, dictionary entries, voice snippets, and per-app profiles. |
 
 Shortcuts are configurable, with hold or toggle recording. Ordinary dictation below **8 words** skips AI cleanup by default; Ask AI and selected-text edits always use AI. Optional wake phrases let you start without pressing a key.
@@ -56,7 +56,7 @@ Settings follow Windows light/dark mode. Help stays behind the **ⓘ** controls,
 
 - **Choose your AI:** ChatGPT account sign-in, Claude through Claude Code, Gemini through Antigravity or an AI Studio API key, or local Qwen models. [Provider setup →](docs/user-guide.md#ai-refinement)
 - **Keep a conversation going:** recent Ask AI threads stay in app memory until exit. Reply by voice or type a follow-up.
-- **Bring context into VS Code:** the companion panel uses the current language and bounded document context. Code changes require a diff preview and explicit approval. [Plugin guide →](extensions/sharpvoice-vscode/README.md)
+- **Bring context into VS Code:** the companion panel uses the current language and bounded document context. Code changes appear inline with per-change and all-file review controls, optional diffs and local review recovery. [Plugin guide →](extensions/sharpvoice-vscode/README.md)
 - **Connect existing tools:** opt-in Connected Ask AI uses selected Codex connections, shows activity, and requires visual approval for supported changes. [Connected tools →](docs/connected-ask.md)
 
 <p align="center">
@@ -91,3 +91,7 @@ For other problems, [open an issue](https://github.com/rleonard55/SharpVoice/iss
 ## License
 
 SharpVoice-owned code is licensed under the **[MIT License](LICENSE)**. Third-party libraries, model weights, runtimes, and provider artwork retain their own licenses and terms; see [Third-party notices](docs/third-party-notices.md) and the [bundled speech runtime notices](vendor/edge-speech/README.md).
+
+In the editor code workflow, exact **Document**, **Comment**, and **Uncomment** requests use the selection captured at request start. Document covers the whole file when initially unselected; Comment/Uncomment do nothing without an initial selection. Native commenting uses the editor language configuration, and results join pending working-file review.
+
+The shared IDE plugin also offers diagnostic Fix/Explain Error, selected related-file context and coordinated edits, test generation/native task execution, voice symbol navigation, custom shortcuts, Explain Changes and project coding conventions. Pending source/baseline recovery is stored locally per workspace (up to 2 MiB); conversation/audio are not included. See the [plugin workflow guide](extensions/sharpvoice-vscode/README.md#ide-workflow-tools-030).

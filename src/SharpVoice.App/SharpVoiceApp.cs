@@ -72,7 +72,8 @@ internal sealed partial class SharpVoiceApp : IDisposable
         };
         desktop.ModelsRefreshRequested = RefreshAvailableModels;
         desktop.ReadLevel = () => recorder.LevelDb;
-        desktop.InputPreviewChanged = enabled => { if (enabled && !speechWork.IsCompleted) throw new InvalidOperationException("Stop the spoken answer before previewing the microphone."); recorder.SetPreview(enabled); };
+        desktop.CanMonitorInput = () => speechWork.IsCompleted && phase == Phase.Idle && !authBusy && !pendingVoiceStart && !editorHotkey.Active && !workspaceAsking && !lifetime.IsCancellationRequested;
+        desktop.InputPreviewChanged = enabled => recorder.SetPreview(enabled);
         desktop.VoicePressed = mode =>
         {
             if (desktop.SetupOpen)
@@ -86,10 +87,11 @@ internal sealed partial class SharpVoiceApp : IDisposable
                 if (phase is not (Phase.Arming or Phase.Recording)) desktop.ResetRecordingGesture();
                 return;
             }
+            if (TryEditorHotkey(mode)) return;
             if (editorSession.Busy) { desktop.ResetRecordingGesture(); desktop.SetStatus("Finish or cancel the editor voice session first."); return; }
             RequestVoicePressed(mode); if (!pendingVoiceStart && phase is not (Phase.Arming or Phase.Recording)) desktop.ResetRecordingGesture();
         };
-        desktop.Released = () => { if (wakeSession is not null) { wakeSession.ConsumeRelease(); return; } if (!editorSession.Busy) Released(); };
+        desktop.Released = () => { if (wakeSession is not null) { wakeSession.ConsumeRelease(); return; } if (editorHotkey.Pending) { CancelEditorHotkey(); desktop.ResetRecordingGesture(); return; } if (!editorSession.Busy || editorHotkey.Active) Released(); };
         desktop.CancelRequested = Cancel;
         desktop.PauseChanged = paused =>
         {
@@ -115,6 +117,7 @@ internal sealed partial class SharpVoiceApp : IDisposable
             loginStartup.Save(next.StartOnLogin, () => ConfigManager.Save(next));
             var historyChanged = this.config.PersistHistory != next.PersistHistory;
             this.config = next;
+            if (!next.AnswerSpeechEnabled) StopAnswerSpeech();
             if (!next.SmartAsk) { StopAnswerSpeech(); desktop.HideAnswer(); }
             if (historyChanged) { historyRevision++; PersistHistory(); }
             if (restart)
@@ -655,7 +658,7 @@ internal sealed partial class SharpVoiceApp : IDisposable
         if (workspaceAsking) { CancelWorkspaceRequest(); return; }
         if (answerReply is not null) { CancelAnswerReply(); return; }
         _ = StopLiveTranscription();
-        CancelPendingVoice(); StopAnswerSpeech(); answerInsertion?.Cancel();
+        CancelEditorHotkey(); CancelPendingVoice(); StopAnswerSpeech();
         lock (connectedGate) { connectedCancellation?.Cancel(); connectedDecision?.TrySetResult(false); connectedDecision = null; connectedChangeId = null; }
         desktop.SetConnectedRecording(false);
         CancelEditor();
@@ -760,7 +763,6 @@ internal sealed partial class SharpVoiceApp : IDisposable
             wakePreparation?.Dispose();
             operation?.Dispose(); login?.Dispose(); lifetime.Dispose();
             speechCancellation?.Dispose(); speechCancellation = null;
-            answerInsertion?.Dispose(); answerInsertion = null;
         }
     }
 }

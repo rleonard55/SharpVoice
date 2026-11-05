@@ -22,7 +22,7 @@ internal sealed partial class SharpVoiceApp
     private AppConfig WorkspaceSettings => WritingTools.Resolve(config, "code");
     private ConversationScope WorkspaceScope => workspaceMode is "dictate" or "edit"
         ? new("code", workspacePeer + "|" + workspaceKey + "|" + workspaceContext?.Uri, WorkspaceSettings.Backend + ":" + conversationIdentity)
-        : workspaceIncludeFile ? new("editor_ask", workspacePeer + "|" + workspaceKey + "|" + workspaceContext?.Uri, WorkspaceSettings.Backend + ":" + conversationIdentity)
+        : workspaceContext is not null ? new("editor_ask", workspacePeer + "|" + workspaceKey + "|" + workspaceContext?.Uri, WorkspaceSettings.Backend + ":" + conversationIdentity)
         : GeneralScope(WorkspaceSettings);
     private void BindWorkspace(EditorFrame frame)
     {
@@ -42,19 +42,24 @@ internal sealed partial class SharpVoiceApp
         var frame = new EditorFrame("workspace", Conversation: display,
             Conversations: conversations.List(view.Scope).Select(x => new ConversationSummary(x.Id, x.Title, x.Scope.Domain, x.Retired)).ToArray(),
             Message: state == "busy" ? "SharpVoice is busy · Finish the current recording or request" : workspaceMessage, State: state, Model: recordingModel, Context: workspaceContext,
-            Mode: workspaceMode, IncludeFile: workspaceIncludeFile, ConversationId: view.Id, TurnId: editorSession.Busy ? editorSession.Id : workspaceLease?.TurnId,
+            Mode: workspaceMode, IncludeFile: workspaceIncludeFile, ConversationId: view.Id, TurnId: editorSession.Busy ? editorSession.Id : editorHotkey.Active && editorHotkey.Mode == VoiceMode.AskAi ? editorHotkey.Id : workspaceLease?.TurnId,
             HostId: conversations.HostId, ClientId: workspaceClient, Sequence: ++workspaceSequence);
         var sent = editorBridge.SendAsync(frame); preloads.RemoveAll(t => t.IsCompleted); preloads.Add(sent);
         _ = sent.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
     }
     private void WorkspaceDisconnected()
     {
+        CancelEditorHotkey();
         if (workspaceAsking) CancelWorkspaceRequest();
         if (editorSession.Busy) Cancel();
         workspaceClient = "";
     }
     private void HandleWorkspace(EditorFrame frame)
     {
+        var hotkeyVoice = frame.Type == "workspace_voice" && frame.State == "hotkey";
+        if (hotkeyVoice && workspaceAsking && editorHotkey.Active && !editorHotkey.Pending && editorHotkey.Mode == VoiceMode.AskAi && frame.Id == editorHotkey.Id && frame.ClientId == editorHotkeyClient && frame.Mode == "ask" && frame.Instruction is null) return;
+        if (hotkeyVoice && (editorHotkey.Mode != VoiceMode.AskAi || !editorHotkey.Pending || frame.Id != editorHotkey.Id || frame.ClientId != editorHotkeyClient || frame.Mode != "ask" || frame.Instruction is not null || !EditorHotkeyFocused()))
+            throw new InvalidOperationException("The Ask AI shortcut request expired or editor focus changed.");
         BindWorkspace(frame);
         if (frame.Type == "workspace_copy")
         {
@@ -68,7 +73,7 @@ internal sealed partial class SharpVoiceApp
             });
             preloads.Add(copy); _ = copy.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted); return;
         }
-        if (frame.Type == "workspace_cancel") { if (workspaceAsking) CancelWorkspaceRequest(); else if (editorSession.Busy) Cancel(); PublishWorkspace(); return; }
+        if (frame.Type == "workspace_cancel") { if (editorHotkey.Pending) { CancelEditorHotkey(); desktop.ResetRecordingGesture(); } if (workspaceAsking) CancelWorkspaceRequest(); else if (editorSession.Busy) Cancel(); PublishWorkspace(); return; }
         if (frame.Type == "workspace_stop") { if (workspaceAsking && phase == Phase.Recording) FinishWorkspaceRecording(); else if (workspaceAsking && phase == Phase.Arming) CancelWorkspaceRequest(); return; }
         if (frame.Type == "workspace_sync") { PublishWorkspace(); return; }
         if ((frame.Type is "workspace_new" or "workspace_select" or "workspace_delete" or "workspace_clear") && phase is not (Phase.Idle or Phase.Starting) && !authBusy)
@@ -81,13 +86,14 @@ internal sealed partial class SharpVoiceApp
             }));
             return;
         }
-        if (phase != Phase.Idle || editorSession.Busy || authBusy) throw new InvalidOperationException("Finish or cancel the current operation first.");
+        if (hotkeyVoice && !editorHotkey.Accept(frame.Id, DateTimeOffset.UtcNow)) throw new InvalidOperationException("The Ask AI shortcut request expired.");
+        if (phase != Phase.Idle || editorSession.Busy || editorHotkey.Pending || authBusy) throw new InvalidOperationException("Finish or cancel the current operation first.");
         if (frame.Type is "workspace_mode" or "workspace_new" or "workspace_ask" or "workspace_voice")
         {
             var mode = frame.Mode ?? "ask";
             if (mode is not ("ask" or "dictate" or "edit")) throw new InvalidDataException("Unsupported panel mode.");
-            if (frame.IncludeFile || mode != "ask") { if (frame.Context is null) throw new InvalidDataException("Current document context is required."); EditorValidation.ValidateContext(frame.Context); }
-            workspaceMode = mode; workspaceIncludeFile = frame.IncludeFile; workspaceContext = frame.IncludeFile || mode != "ask" ? frame.Context : null;
+            if (frame.Context is not null || frame.IncludeFile || mode != "ask") { if (frame.Context is null) throw new InvalidDataException("Current document context is required."); EditorValidation.ValidateContext(frame.Context); }
+            workspaceMode = mode; workspaceIncludeFile = frame.IncludeFile; workspaceContext = frame.Context;
         }
         switch (frame.Type)
         {
@@ -101,7 +107,14 @@ internal sealed partial class SharpVoiceApp
                 conversations.Delete(frame.ConversationId); workspaceConversation = ""; break;
             case "workspace_clear":
                 foreach (var thread in conversations.List(WorkspaceScope)) conversations.Delete(thread.Id); workspaceConversation = ""; break;
-            case "workspace_ask": StartWorkspaceAsk(frame.Instruction ?? ""); return;
+            case "workspace_ask":
+                if (frame.TurnId is not null)
+                {
+                    var last = WorkspaceView().Turns.LastOrDefault();
+                    if (frame.ConversationId != workspaceConversation || last?.Id != frame.TurnId || last.Status != "Needs Clarification" || last.Choices?.Contains(frame.Instruction, StringComparer.Ordinal) != true)
+                        throw new InvalidOperationException("That suggested reply belongs to an earlier question.");
+                }
+                StartWorkspaceAsk(frame.Instruction ?? ""); return;
             case "workspace_voice": StartWorkspaceVoice(); return;
             default: throw new InvalidDataException("Unsupported workspace action.");
         }
@@ -110,11 +123,11 @@ internal sealed partial class SharpVoiceApp
     private void BeginWorkspaceOperation()
     {
         if (WorkspaceSettings.Backend == "none") throw new InvalidOperationException("Choose an AI provider in SharpVoice AI & Models first.");
-        var window = WindowTarget.Capture();
+        var window = environment.CaptureTarget();
         if (!EditorPlugins.IsSupportedEditor(window.ProcessName)) throw new InvalidOperationException("Focus the VS Code window before using its SharpVoice panel.");
         StopAnswerSpeech(); desktop.HideAnswer();
         workspaceBefore = WorkspaceView(); operation?.Dispose(); operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); operation.CancelAfter(TimeSpan.FromMinutes(5));
-        workspaceAsking = true; recordingConfig = WorkspaceSettings with { RecordingGesture = "toggle" }; recordingMode = VoiceMode.AskAi; recordingModel = ""; generation++;
+        workspaceAsking = true; recordingConfig = WorkspaceSettings with { RecordingGesture = editorHotkey.Active && editorHotkey.Mode == VoiceMode.AskAi ? config.RecordingGesture : "toggle" }; recordingMode = VoiceMode.AskAi; recordingModel = ""; generation++;
         desktop.SetActive(true); desktop.SetDictationConfig(recordingConfig); desktop.SetVoiceMode(VoiceMode.AskAi); desktop.SetEditingSelection(false);
     }
     private void StartWorkspaceAsk(string request)
@@ -187,10 +200,19 @@ internal sealed partial class SharpVoiceApp
         try
         {
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromMinutes(2));
-            var context = workspaceIncludeFile ? workspaceContext?.ContextText : null;
-            var response = await AnswerConversation.From(view, context).ReplyAsync(refiner, request, "code", recordingConfig, deadline.Token);
-            ct.ThrowIfCancellationRequested(); if (!CompleteAskTurn(lease, response, "Answered")) throw new OperationCanceledException();
-            desktop.Post(() => { if (id == generation && !ct.IsCancellationRequested) { workspaceMessage = "Answered · Reply by voice or text"; PublishWorkspace(); } });
+            var response = await AnswerConversation.FromEditor(view, workspaceContext, workspaceIncludeFile).ReplyStructuredAsync(refiner, request, "code", recordingConfig, deadline.Token);
+            ct.ThrowIfCancellationRequested();
+            await response.DeliverAsync(desktop.Post, answer =>
+            {
+                if (id != generation || !workspaceAsking || workspaceLease != lease || view.Id != workspaceConversation || view.Scope != WorkspaceScope)
+                    throw new OperationCanceledException();
+                if (!conversations.Complete(lease, answer.Text, answer.Kind == "clarify" ? "Needs Clarification" : "Answered", recordingModel, answer.Choices))
+                    throw new OperationCanceledException();
+                workspaceMessage = answer.Kind == "clarify" ? "Your answer is needed · Reply by voice or text" : "Answered · Reply by voice or text";
+                if (answer.Kind == "clarify") desktop.PlayFollowUpQuestion();
+                PublishWorkspace();
+            }, ct);
+
         }
         finally { conversations.Cancel(lease); }
     }
@@ -203,7 +225,7 @@ internal sealed partial class SharpVoiceApp
     private void FinishWorkspace(int id, bool canceled = false)
     {
         if (generation != id || !workspaceAsking || phase == Phase.Cancelling && !canceled) return;
-        workspaceAsking = false; workspaceLease = null; phase = Phase.Idle; desktop.SetRecording(false); desktop.SetActive(false); RestoreSpeechInput(); PublishWorkspace();
+        workspaceAsking = false; workspaceLease = null; if (editorHotkey.Active && editorHotkey.Mode == VoiceMode.AskAi) CancelEditorHotkey(); phase = Phase.Idle; desktop.SetRecording(false); desktop.SetActive(false); RestoreSpeechInput(); PublishWorkspace();
     }
     private void CancelWorkspaceRequest()
     {

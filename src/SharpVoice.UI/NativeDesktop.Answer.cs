@@ -8,9 +8,9 @@ namespace SharpVoice.UI;
 
 public sealed partial class NativeDesktop
 {
+    public Action<bool>? AnswerSpeechChanged { get; set; }
     public Action? AnswerReplayRequested { get; set; }
     public Action? AnswerStopRequested { get; set; }
-    public Action? AnswerInsertRequested { get; set; }
     public Action? AnswerClosed { get; set; }
     public Action? AnswerVoiceRequested { get; set; }
     public Action<string>? AnswerReplyRequested { get; set; }
@@ -20,7 +20,6 @@ public sealed partial class NativeDesktop
     public Action<string>? DeleteConversationRequested { get; set; }
     public Action? ClearConversationsRequested { get; set; }
     private string answerConversationId = "";
-    private bool answerInsertionAvailable = true;
     private nint answerWindow, answerText, answerModel, answerStatus, answerInput, answerVoice, answerSend;
     private string answerContent = "";
     private readonly List<nint> answerControls = [];
@@ -57,17 +56,24 @@ public sealed partial class NativeDesktop
             answerInput = Item("EDIT", "", 0x00811080, 24, 318, 448, 32, 4511);
             Win32.SendMessageW(answerInput, 0xC5, 4000, 0); Win32.SendMessageW(answerInput, 0xD3, 3, (8 << 16) | 8);
             answerSend = Item("BUTTON", "Send", 0x1000B, 484, 318, 112, 32, 4512);
-            var labels = new[] { "Stop", "Replay", "Copy", "Insert", "Close" };
-            for (var i = 0; i < labels.Length; i++)
+            (string Label, int Id)[] actions = [("Speech: On", 4514), ("Replay", 4502), ("Copy", 4503), ("Close", 4505), ("Stop", 4501)];
+            for (var i = 0; i < actions.Length; i++)
             {
-                Item("BUTTON", labels[i], 0x1000B, 24 + i * 116, 374, 108, 34, 4501 + i);
+                Item("BUTTON", actions[i].Label, 0x1000B, 24 + i * 116, 374, 108, 34, actions[i].Id);
             }
         }
         answerContent = text;
-        Win32.SetWindowTextW(answerText, text); Win32.SetWindowTextW(answerModel, model); Win32.SetWindowTextW(answerStatus, "Preparing Speech…");
+        Win32.SetWindowTextW(answerText, text); Win32.SetWindowTextW(answerModel, model); Win32.SetWindowTextW(answerStatus, config.AnswerSpeechEnabled ? "Answer Ready" : "Speech Off · Answer Ready");
         Win32.SetWindowTextW(answerInput, ""); SetAnswerReplyState(false); ShowAnswerTyping(false);
+        SetAnswerSpeechEnabled(config.AnswerSpeechEnabled);
+        StartAnswerClickObservation();
         ApplyTheme();
         Win32.ShowWindow(hudWindow, 0); Win32.ShowWindow(answerWindow, 4); // Display without activating; an explicit click can focus controls.
+    }
+    public void SetAnswerSpeechEnabled(bool enabled)
+    {
+        config = config with { AnswerSpeechEnabled = enabled };
+        if (answerWindow != 0) Win32.SetWindowTextW(Win32.GetDlgItem(answerWindow, 4514), enabled ? "Speech: On" : "Speech: Off");
     }
     public void SetAnswerStatus(string text) { if (answerStatus != 0) Win32.SetWindowTextW(answerStatus, text); }
     public void SetAnswerConversation(ConversationView view)
@@ -76,18 +82,12 @@ public sealed partial class NativeDesktop
         if (answerWindow != 0) Win32.SetWindowTextW(Win32.GetDlgItem(answerWindow, 4507), Short(view.Title, 35));
         if (answerWindow != 0) Win32.SetWindowTextW(answerWindow, "SharpVoice · " + view.Title);
     }
-    public void SetAnswerInsertionAvailable(bool available)
-    {
-        answerInsertionAvailable = available;
-        if (answerWindow != 0) Win32.EnableWindow(Win32.GetDlgItem(answerWindow, 4504), available ? 1 : 0);
-    }
     public void SetAnswerReplyState(bool busy, bool recording = false, bool arming = false)
     {
         if (answerWindow == 0) return;
         Win32.SetWindowTextW(answerVoice, recording ? "Stop Recording" : arming ? "Cancel Recording" : "Reply by Voice");
         Win32.EnableWindow(answerVoice, !busy || recording || arming ? 1 : 0);
-        foreach (var id in new[] { 4502, 4504, 4510, 4511, 4512 }) Win32.EnableWindow(Win32.GetDlgItem(answerWindow, id), busy ? 0 : 1);
-        if (!answerInsertionAvailable) Win32.EnableWindow(Win32.GetDlgItem(answerWindow, 4504), 0);
+        foreach (var id in new[] { 4502, 4510, 4511, 4512 }) Win32.EnableWindow(Win32.GetDlgItem(answerWindow, id), busy ? 0 : 1);
     }
     private void ShowAnswerTyping(bool show)
     {
@@ -97,6 +97,7 @@ public sealed partial class NativeDesktop
     public void HideAnswer()
     {
         if (answerWindow == 0 || Win32.IsWindowVisible(answerWindow) == 0) return;
+        StopAnswerClickObservation();
         Win32.ShowWindow(answerWindow, 0); ClearControlHover(); AnswerClosed?.Invoke();
         answerContent = ""; Win32.SetWindowTextW(answerText, "");
         Win32.SetWindowTextW(answerInput, "");
@@ -112,13 +113,18 @@ public sealed partial class NativeDesktop
             case 4501: AnswerStopRequested?.Invoke(); break;
             case 4502: AnswerReplayRequested?.Invoke(); break;
             case 4503: TextInjector.SetClipboardText(answerContent, answerWindow); SetAnswerStatus("Copied"); break;
-            case 4504: if (answerInsertionAvailable) AnswerInsertRequested?.Invoke(); break;
             case 4509: if (HoverIsWindowEnabled(answerVoice) != 0) AnswerVoiceRequested?.Invoke(); break;
             case 4510: if (HoverIsWindowEnabled(Win32.GetDlgItem(answerWindow, 4510)) != 0) ShowAnswerTyping(true); break;
             case 4512:
                 if (HoverIsWindowEnabled(answerSend) != 0 && !string.IsNullOrWhiteSpace(Text(answerInput))) AnswerReplyRequested?.Invoke(Text(answerInput));
                 break;
             case 4513: AnswerConversationMenu(); break;
+            case 4514:
+                var enabled = !config.AnswerSpeechEnabled;
+                AnswerSpeechChanged?.Invoke(enabled);
+                SetAnswerSpeechEnabled(enabled);
+                if (!enabled) SetAnswerStatus("Speech Off · Answer Retained");
+                break;
         }
         return true;
     }

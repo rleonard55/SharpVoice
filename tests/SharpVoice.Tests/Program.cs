@@ -14,6 +14,11 @@ using SharpVoice.UI;
 
 if (args is ["--turnaround-whisper-benchmark", var turnaroundModel, var turnaroundWav]) { await TurnaroundChecks.Benchmark(turnaroundModel, turnaroundWav); return 0; }
 if (args is ["--turnaround-config-check"]) { await TurnaroundChecks.Preferences(); return 0; }
+if (args is ["--editor-hotkey-app", var editorHotkeyModels, var editorHotkeyGesture]) { WindowsHelpSmoke.RunEditorHotkeyApp(editorHotkeyModels, editorHotkeyGesture); return 0; }
+if (args is ["--windows-automatic-monitor-smoke"]) { WindowsSettingsSmoke.RunAutomaticMonitoring(); return 0; }
+if (args is ["--editor-hotkey-check"]) { await EditorChecks.HotkeyHandoff(); await RecordingGestureChecks.ResumedToggle(); return 0; }
+if (args is ["--followup-check"]) { await FollowUpChecks.Contracts(); await FollowUpChecks.CanceledDelivery(); await AskAiChecks.StructuredQuestions(); await SuccessCueChecks.QuestionAsset(); return 0; }
+if (args is ["--answer-preferences-check"]) { await SmartAskChecks.AnswerPreferences(); return 0; }
 if (args is ["--updates-check"]) { await ReleaseUpdateChecks.Preferences(); await ReleaseUpdateChecks.Policy(); await ReleaseUpdateChecks.Cancellation(); return 0; }
 if (args is ["--windows-provider-diagnostics-smoke", var providerOutput]) { WindowsHelpSmoke.Run(providerOutput, diagnosticsOnly: true); return 0; }
 if (args is ["--provider-rejection-check"]) { await ProviderDiagnosticChecks.RejectionGuidance(); return 0; }
@@ -564,6 +569,12 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Ask AI treats selected text as optional context", AskAiChecks.Context),
     ("Ask AI guards blank speech, missing AI and oversized context", AskAiChecks.Guards),
     ("Selected source ownership survives post-roll cancellation and late capture", SelectionOwnershipChecks.Run),
+    ("Question cue is distinct two-note PCM", SuccessCueChecks.QuestionAsset),
+    ("Plugin Ask uses structured questions without changing native answers", AskAiChecks.StructuredQuestions),
+    ("Plugin Ask sends file identity and selected code to the provider", AskAiChecks.EditorContextRequests),
+    ("Canceled follow-up delivery cannot publish or cue a question", FollowUpChecks.CanceledDelivery),
+    ("Editor project sources and guidance remain bounded", EditorChecks.ProjectContext),
+    ("Follow-up results and reply choices are bounded", FollowUpChecks.Contracts),
     ("Insertion success cue is short, subdued and distinct PCM", SuccessCueChecks.Asset),
     ("Economical catalog ranking and safe metadata", ModelEditingChecks.Catalog),
     ("Selected editing payload and account-bound model resolution", ModelEditingChecks.EditingAndResolvedModel),
@@ -908,6 +919,9 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Conversation memory protects approvals and rolls back rejected over-budget turns", ConversationChecks.GuardedBounds),
     ("Conversation store retains scoped bounded memory and rejects stale results", ConversationChecks.Store),
     ("Answer follow-ups retain bounded conversation context and bypass cleanup thresholds", SmartAskChecks.FollowUp),
+    ("Resumed toggle Ask stops on the next shortcut", RecordingGestureChecks.ResumedToggle),
+    ("Editor hotkey handoffs reject released, duplicate and expired starts", EditorChecks.HotkeyHandoff),
+    ("Answer speech and verbosity migrate, persist and reach providers", SmartAskChecks.AnswerPreferences),
     ("Smart Ask is opt-in and preferences survive migration", SmartAskChecks.Defaults),
     ("Spoken answers visibly fall back and cancellation never speaks again", SmartAskChecks.SpeechFallback),
     ("Pending microphone startup preserves Ask promotion and hotkey release", SmartAskChecks.RecordingGate),
@@ -918,6 +932,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Editor pipe recovers after simultaneous incomplete handshakes", EditorBridgeChecks.Recovery),
     ("Editor pipe authenticates, routes bounded frames and removes discovery", EditorBridgeChecks.Channel),
     ("Code generation uses context and structured output despite cleanup threshold", EditorChecks.Provider),
+    ("Exact editor shortcuts preserve scope and reject model native actions", EditorChecks.Shortcuts),
+    ("Editor shortcuts reject constructs unsupported by the file format", EditorChecks.LanguagePolicy),
     ("Editor contracts reject malformed scope and retain code whitespace", EditorChecks.Contracts),
     ("Editor clarification accepts updated selection only in the unchanged source", EditorChecks.Retarget),
     ("Editor sessions reject stale, busy, duplicate and expired operations", EditorChecks.Sessions),

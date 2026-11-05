@@ -1,0 +1,18 @@
+# Ten IDE workflow additions
+
+User approved all ten proposed features. Implement them in the shared Windows VS Code/Antigravity VSIX using public VS Code APIs. Preserve prior changes and the working-file review/cancellation contracts.
+
+1. Individual pending-change accept/revert and previous/next navigation, via editor CodeLens, commands, panel list and exact voice/text commands. Conflicted manual edits remain protected. All-workspace accept/revert complements existing current-file controls.
+2. Fix/Explain Error selects an actual current diagnostic (picker for ambiguity), supplies exact message/range, and reports current error/warning counts before/after. Explain stays read-only.
+3. User-selected related files supply visible bounded context; coordinated editing processes selected existing files sequentially using fresh context and independent version checks. Each file remains pending; partial completion is explicitly reported if later files fail or the user cancels. No atomic-all-files promise. Review per file or all pending files.
+4. Test This generates tests into a user-chosen test document using available project/framework context; Run Tests selects an existing native workspace task and reports actual process exit status. Never claim tests ran from a model response.
+5. Local recovery checkpoints retain review text, original text per pending range, conflicts and file identities. Offer Resume/Discard after reload; validate against current contents and mark changed files conflicted. Persist no conversation or audio, no automatic writes/restoration. Bound stored text and allow explicit deletion. Keep unopened/untitled checkpoints until user discards or restores appropriate file; explain unavailable untitled targets.
+6. Voice/text symbol navigation: Go to name, Select name, Select This Function, Next Error. Native symbols and actual diagnostics define targets.
+7. Personal/workspace custom shortcut maps expand exact phrases into reusable AI instructions; built-ins win. Show expanded request and configure via settings.
+8. Explain Changes sends bounded before/after hunks for read-only explanation, with a panel list that jumps to each hunk. Label conflicted hunks. No source edits.
+9. Ambiguous symbol/diagnostic targeting opens a native quick picker with names/locations; selecting a candidate captures the exact target before generation. Normal LLM clarifications remain supported.
+10. Collect applicable AGENTS.md and bounded editor/formatter configuration within the workspace; show guidance file names and tell model source is untrusted and current user intent/language rules win. Personal/workspace coding instructions available in settings. No external tools automatically execute repository instructions.
+
+Architecture choices: extend EditorContext with optional related_sources and project_guidance; bump paired protocol. Keep output single-target for strict validation and process coordinated edits in a bounded queue. Use normal language services and native tasks rather than inventing parsers or executing model commands. Native task execution is explicitly user-invoked and selected. Recoverable source is workspace-local extension storage, with a 2 MiB total cap and clear Resume/Discard controls. Remote/virtual/untrusted eligibility remains unchanged.
+
+Verification: pure model tests for partial review/checkpoint validation and limits; controller tests for stale/duplicate/canceled operations; module tests for bounded context/shortcut resolution/native targeting; existing desktop and VS Code host regression suites; package and Native AOT delivery integrity. Antigravity uses identical code but native host compatibility remains separately experimental unless actually tested.

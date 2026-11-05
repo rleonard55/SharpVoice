@@ -176,6 +176,48 @@ internal static class SmartAskChecks
         stop.Cancel(); try { await pending; throw new Exception("Active speech ignored cancellation."); } catch (OperationCanceledException) { }
         if (windowsCalls != 1) throw new Exception("Stopping Edge triggered Windows fallback.");
     }
+    public static async Task AnswerPreferences()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "SharpVoice-answer-preferences-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            ConfigManager.Save(new AppConfig(), path);
+            var defaults = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+            if (defaults["answer_speech_enabled"]?.GetValue<bool>() != true || defaults["answer_verbosity"]?.GetValue<string>() != "brief")
+                throw new Exception("Independent speech and brief answer defaults are missing.");
+            if (new AppConfig() == new AppConfig { AnswerSpeechEnabled = false } || new AppConfig() == new AppConfig { AnswerVerbosity = "detailed" })
+                throw new Exception("Answer preferences are ignored by equality.");
+            var legacy = defaults.DeepClone().AsObject(); legacy.Remove("answer_speech_enabled"); legacy.Remove("answer_verbosity");
+            File.WriteAllText(path, legacy.ToJsonString());
+            if (ConfigManager.Load(path) != new AppConfig()) throw new Exception("Legacy answer preferences did not migrate.");
+            foreach (var (verbosity, expected) in new[] { ("brief", "only the year"), ("conversational", "natural conversational"), ("detailed", "thorough explanation") })
+            {
+                var json = defaults.DeepClone().AsObject(); json["answer_speech_enabled"] = false; json["answer_verbosity"] = verbosity;
+                File.WriteAllText(path, json.ToJsonString()); var config = ConfigManager.Load(path);
+                if (config == new AppConfig()) throw new Exception("Answer preference changes are ignored by config equality.");
+                ConfigManager.Save(config, path);
+                var saved = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
+                if (saved["answer_speech_enabled"]!.GetValue<bool>() || saved["answer_verbosity"]!.GetValue<string>() != verbosity) throw new Exception("Answer preferences did not persist.");
+                using var http = new HttpClient(new Handler(async request =>
+                {
+                    using var payload = System.Text.Json.JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+                    var instructions = payload.RootElement.GetProperty("instructions").GetString()!;
+                    if (!instructions.Contains(expected) || !instructions.Contains("Explicit requests")) throw new Exception("Answer length preferences did not reach the provider: " + verbosity);
+                    var delta = System.Text.Json.JsonEncodedText.Encode("{\"route\":\"answer\",\"text\":\"1969\"}").ToString();
+                    return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("data: {\"type\":\"response.output_text.delta\",\"delta\":\"" + delta + "\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"model\":\"fixture\"}}\n\n", System.Text.Encoding.UTF8, "text/event-stream") };
+                }));
+                var refiner = new SharpVoice.Refiner.UnifiedRefiner(http, new Session());
+                config = config with { Backend = "chatgpt_oauth", RefinementModel = "fixture" };
+                await new SharpVoice.Refiner.SmartAskRefiner(refiner).GenerateAsync("What year?", null, "notepad", config, default);
+                var thread = SharpVoice.Refiner.AnswerConversation.Start("What year?", "1969", null);
+                await thread.ReplyAsync(refiner, "Tell me more", "notepad", config, default);
+            }
+            var invalid = defaults.DeepClone().AsObject(); invalid["answer_verbosity"] = "unbounded";
+            File.WriteAllText(path, invalid.ToJsonString());
+            try { ConfigManager.Load(path); throw new Exception("Unknown answer verbosity was accepted."); } catch (ArgumentException) { }
+        }
+        finally { File.Delete(path); }
+    }
     public static Task Defaults()
     {
         var path = Path.Combine(Path.GetTempPath(), "SharpVoice-smart-" + Guid.NewGuid().ToString("N") + ".json");

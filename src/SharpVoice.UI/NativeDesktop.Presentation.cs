@@ -126,7 +126,6 @@ public sealed partial class NativeDesktop
         4501 => "\uE71A",
         4502 => "\uE72C",
         4503 => "\uE8C8",
-        4504 => "\uE77F",
         4505 => "\uE711",
         4509 => "\uE720",
         4510 => "\uE765",
@@ -214,7 +213,7 @@ public sealed partial class NativeDesktop
             Win32.FillRect((nint)wParam, in rect, background);
             if (hwnd == settingsWindow)
             {
-                var card = new Win32.Rect { Left = 24, Top = 186, Right = 704, Bottom = 525 };
+                var card = new Win32.Rect { Left = 24, Top = 186, Right = 704, Bottom = 544 };
                 Rounded((nint)wParam, card, surfaceBrush, 16);
             }
             result = 1; return true;

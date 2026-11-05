@@ -17,3 +17,7 @@ test('out of order snapshots cannot replace a newer completed state',()=>{
  assert.equal(state.accept({type:'workspace',host_id:'a',sequence:1,state:'recording',message:'Old recording'}),false);
  assert.equal(state.snapshot.message,'Answered');
 });
+test('panel accepts explicit local batch review actions',()=>{
+ for(const action of ['accept','revert'])assert.deepEqual(parsePanelIntent({action}),{action});
+ assert.throws(()=>parsePanelIntent({action:'revert',uri:'file:///elsewhere'}));
+});

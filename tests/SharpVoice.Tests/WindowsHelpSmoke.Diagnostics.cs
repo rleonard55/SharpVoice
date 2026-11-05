@@ -22,6 +22,16 @@ internal static partial class WindowsHelpSmoke
         Win32.SendMessageW(window, 0x4E, 1014, (nint)(&notice));
         var button = Win32.GetDlgItem(window, 124);
         if (button == 0 || Win32.IsWindowVisible(button) == 0) throw new Exception("AI & Models has no visible Diagnostics action.");
+        foreach (var palette in new[] { ThemeColors.Light, ThemeColors.DarkTheme })
+        {
+            changeTheme(palette); Win32.SendMessageW(window, 0x1A, 0, 0); Pump();
+            Win32.GetWindowRect(window, out var settingsBounds);
+            Win32.GetWindowRect(button, out var buttonBounds);
+            var sampleX = buttonBounds.Right - settingsBounds.Left + 8;
+            var sampleY = buttonBounds.Bottom - settingsBounds.Top + 4;
+            if (RenderHelp(window, output is null ? null : output + (palette.Dark ? "-diagnostics-panel-dark.bmp" : "-diagnostics-panel-light.bmp"), sampleY, sampleX) != palette.Surface)
+                throw new Exception("Diagnostics extends beyond the colored settings panel.");
+        }
         ProviderDiagnostics.Shared.Clear();
         ProviderDiagnostics.Shared.Record(new(ProviderOperationKind.ChatGptInference, ProviderFailureKind.Tls, null, null, 125));
         Win32.SendMessageW(window, 0x111, 124, button);

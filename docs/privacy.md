@@ -21,3 +21,13 @@ Successful sign-in does not establish inference connectivity. SharpVoice exchang
 Use **Test Connection** to send a fixed public probe without microphone, selection or clipboard content. Remote probes consume a small amount of provider allowance. Ask IT to correlate the operation/category with proxy, URL-filtering and TLS-decryption logs. Trusted inspection certificates do not rule out TLS negotiation problems, response rewriting, connection resets, or streaming timeouts. A 403 can reflect provider permissions or filtering; a 407 indicates proxy authentication. These diagnostics do not bypass the proxy or disable certificate checks.
 
 No real credentials or company traffic are needed to run the offline diagnostic regression tests.
+
+
+## IDE review recovery
+
+The IDE plugin stores pending source text, original change baselines, file identities and conflict markers in local workspace extension storage, up to 2 MiB combined. This enables explicit Resume Review after an editor reload. It does not include conversation transcripts or audio and is separate from optional encrypted dictation history. Resume does not overwrite source; changed files are protected as conflicts. Discard Recovery removes inactive saved checkpoints; Accept All Files clears active and saved review history. The IDE and operating system govern the storage location and protection.
+
+
+## IDE Ask context
+
+Ask AI in the IDE automatically sends the active filename, extension, language and highlighted text to the configured AI provider. With no selection it sends file details only. Include Current File explicitly adds bounded surrounding/file content using the plugin context setting. Contextual Ask conversations are scoped to the file; with no active file, Ask uses the general desktop conversation. Ask answers remain read-only.

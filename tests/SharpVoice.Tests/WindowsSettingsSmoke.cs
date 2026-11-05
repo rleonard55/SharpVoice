@@ -66,25 +66,22 @@ internal static partial class WindowsSettingsSmoke
         Win32.SetWindowTextW(gate, config.NoiseGateDb.ToString(System.Globalization.CultureInfo.InvariantCulture));
         AppConfig? applied = null;
         desktop.ConfigChanged = next => applied = next;
-        SetWindowPos(desktop.SettingsHandle, 0, -32000, -32000, 0, 0, 0x15);
-        Win32.ShowWindow(desktop.SettingsHandle, 4); // Offscreen and without activation.
         var previewChanges = new List<bool>();
         desktop.InputPreviewChanged = enabled => previewChanges.Add(enabled);
-        var preview = GetDlgItem(desktop.SettingsHandle, 111);
-        Win32.SendMessageW(desktop.SettingsHandle, 0x111, 111, 0);
+        SetWindowPos(desktop.SettingsHandle, 0, -32000, -32000, 0, 0, 0x15);
+        Win32.ShowWindow(desktop.SettingsHandle, 4); // Offscreen and without activation.
+        Win32.SendMessageW(desktop.SettingsHandle, 0x113, 3, 0);
         Win32.SendMessageW(tabs, 0x130C, 1, 0);
         var previewPage = new Win32.Notification { Window = tabs, Id = 1014, Code = -551 };
         Win32.SendMessageW(desktop.SettingsHandle, 0x4E, 1014, (nint)(&previewPage));
-        Win32.SendMessageW(desktop.SettingsHandle, 0x111, 111, 0); // Stale hidden preview action.
-        if (!previewChanges.SequenceEqual(new[] { true, false })) throw new Exception("Preview did not stop on leaving Audio or accepted a stale action.");
+        Win32.SendMessageW(desktop.SettingsHandle, 0x111, 111, 0); // Removed action cannot restart monitoring.
+        if (!previewChanges.SequenceEqual(new[] { true, false })) throw new Exception("Automatic monitoring did not stop on leaving Audio.");
         Win32.SendMessageW(tabs, 0x130C, 0, 0);
         Win32.SendMessageW(desktop.SettingsHandle, 0x4E, 1014, (nint)(&previewPage));
-        Win32.SendMessageW(desktop.SettingsHandle, 0x111, 111, 0);
         desktop.SetActive(true); desktop.SetActive(false);
-        if (!previewChanges.SequenceEqual(new[] { true, false, true, false })) throw new Exception("Dictation did not stop temporary preview.");
-        Win32.SendMessageW(desktop.SettingsHandle, 0x111, 111, 0);
+        if (!previewChanges.SequenceEqual(new[] { true, false, true, false, true })) throw new Exception("Dictation did not suspend and resume automatic monitoring.");
         Win32.SendMessageW(desktop.SettingsHandle, 0x10, 0, 0);
-        if (previewChanges.Last() || previewChanges.Count != 6) throw new Exception("Closing Settings retained microphone preview.");
+        if (previewChanges.Last() || previewChanges.Count != 6) throw new Exception("Closing Settings retained microphone monitoring.");
         Win32.ShowWindow(desktop.SettingsHandle, 4);
         Win32.SendMessageW(desktop.SettingsHandle, 0x111, 101, 0);
         if ((GetWindowLongPtrW(desktop.SettingsHandle, -16) & 0x10000000) != 0)
@@ -283,7 +280,7 @@ internal static partial class WindowsSettingsSmoke
         {
             Win32.SendMessageW(tabs, 0x130C, (nuint)page, 0);
             Win32.SendMessageW(desktop.SettingsHandle, 0x4E, 1014, (nint)(&changed));
-            if (Visible(activation) != (page == 0) || Visible(preview) != (page == 0)) throw new Exception("Microphone activation/preview belongs only on Audio.");
+            if (Visible(activation) != (page == 0) || Visible(GetDlgItem(desktop.SettingsHandle, 1042)) != (page == 0)) throw new Exception("Microphone activation/monitoring belongs only on Audio.");
             if (Visible(minimumWords) != (page == 1)) throw new Exception("Minimum words appeared on the wrong tab.");
             if (Visible(startup) != (page == 5)) throw new Exception("Start on sign-in belongs only on General.");
             if (Visible(GetDlgItem(desktop.SettingsHandle, 1006)) != (page == 4)) throw new Exception("Insertion controls appeared on the wrong tab.");

@@ -14,18 +14,40 @@ public sealed partial class NativeDesktop
     private List<AudioDeviceInfo> audioDevices = [];
     private int buildingPage = -1;
     private nint tabControl, gateSlider, inputMeter, inputLabel, captureLabel;
-    private nint signInButton, signOutButton, cancelButton, previewButton;
-    private bool inputPreview;
+    private nint signInButton, signOutButton, cancelButton, monitoringIndicator;
+    private bool inputPreview, inputMonitoringFailed, settingsMinimized;
     private string modelBackend = "";
     public Action<bool>? InputPreviewChanged { get; set; }
+    // The app owns recorder readiness and spoken-answer playback. Query it before requesting capture.
+    public Func<bool>? CanMonitorInput { get; set; }
     public void StopInputPreview() => SetInputPreview(false);
+    private void RefreshInputMonitoring()
+    {
+        if (monitoringIndicator == 0) return;
+        var eligible = !disposed && !active && !paused && !setupPreview && !settingsMinimized
+            && Win32.IsWindowVisible(settingsWindow) != 0
+            && Win32.SendMessageW(tabControl, 0x130B, 0, 0) == 0
+            && CanMonitorInput?.Invoke() != false;
+        if (!eligible) inputMonitoringFailed = false;
+        if (!eligible) SetInputPreview(false);
+        else if (!inputMonitoringFailed)
+        {
+            try { SetInputPreview(true); }
+            catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
+            {
+                // A disconnected/failed device must not trigger an error on every timer tick.
+                inputMonitoringFailed = true;
+            }
+        }
+        Win32.SetWindowTextW(monitoringIndicator, inputPreview ? "● Monitoring applied mic"
+            : inputMonitoringFailed ? "Monitoring unavailable" : "Monitoring suspended");
+    }
     private void SetInputPreview(bool enabled)
     {
         if (inputPreview == enabled) return;
         if (enabled && (active || paused || Win32.IsWindowVisible(settingsWindow) == 0 || Win32.SendMessageW(tabControl, 0x130B, 0, 0) != 0)) return;
         InputPreviewChanged?.Invoke(enabled);
         inputPreview = enabled;
-        Win32.SetWindowTextW(previewButton, enabled ? "Stop Preview" : "Preview Applied Mic");
     }
     private string editingPromptMode = "prose";
     private bool capturingShortcut;
@@ -57,7 +79,7 @@ public sealed partial class NativeDesktop
         Button("Wake Phrases", 121, 40, 234, 176);
         AddHelp("WakePhrases", "Wake Phrases", 121, 237, 218);
         Button("Refresh Microphones", 105, 250, 234, 210);
-        previewButton = Button("Preview Applied Mic", 111, 475, 234, 200);
+        monitoringIndicator = Control("STATIC", "Monitoring suspended", 0, 475, 242, 200, 25, 1042);
         AddChoice("Mic Activation", "MicrophoneActivation", 294, config.MicrophoneActivation, 1022);
         inputLabel = Control("STATIC", "INPUT LEVEL · Waiting", 0, 40, 350, 635, 25, 1018);
         inputMeter = Control("msctls_progress32", "Input level with noise gate marker", 0, 40, 380, 635, 22, 1016);
@@ -188,7 +210,7 @@ public sealed partial class NativeDesktop
         HideHelp();
         ClearControlHover();
         for (var i = 0; i < pages.Length; i++) foreach (var hwnd in pages[i]) Win32.ShowWindow(hwnd, i == page ? 5 : 0);
-        if (page != 0) StopInputPreview();
+        RefreshInputMonitoring();
         if (page != 1) CancelConnectionTest();
         if (page != 3) CancelShortcutCapture();
         RefreshAuthentication();
@@ -338,6 +360,8 @@ public sealed partial class NativeDesktop
     }
     private unsafe bool HandleSettingsMessage(uint message, nuint wParam, nint lParam)
     {
+        if (message == 0x5) { settingsMinimized = wParam == 1; RefreshInputMonitoring(); }
+        if (message == 0x18 && wParam == 0) { StopInputPreview(); inputMonitoringFailed = false; }
         if ((message == 0x6 && (wParam & 0xFFFF) == 0) || message is 0x3 or 0x5 or 0x216) { HideHelp(); ClearControlHover(); }
         if (message == 0x111 && (wParam >> 16) == 0 && helpEntries.ContainsKey((int)(wParam & 0xFFFF)))
         { ToggleHelp((int)(wParam & 0xFFFF)); return true; }
@@ -353,6 +377,7 @@ public sealed partial class NativeDesktop
         }
         if (message == 0x113 && wParam == 3)
         {
+            RefreshInputMonitoring();
             RefreshInputMeter();
             return true;
         }
@@ -377,7 +402,6 @@ public sealed partial class NativeDesktop
             RefreshInputMeter();
             return true;
         }
-        if (notification == 0 && id == 111) { SetInputPreview(!inputPreview); return true; }
         if (notification == 0 && id == 105) { PopulateDevices(SelectedDeviceId()); return true; }
         if (notification == 0 && id == 108) { if (active) CancelRequested?.Invoke(); return true; }
         if (notification == 0 && id == 110) { StartShortcutCapture("AskHotkey"); return true; }

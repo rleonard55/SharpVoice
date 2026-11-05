@@ -1,8 +1,8 @@
 {
   "name": "sharpvoice-vscode",
   "displayName": "SharpVoice",
-  "description": "Document-aware voice coding and previewed refactors using the SharpVoice desktop app.",
-  "version": "0.2.0",
+  "description": "Document-aware voice coding with inline working-file changes and batch review.",
+  "version": "0.3.2",
   "publisher": "sharpvoice",
   "license": "MIT",
   "engines": {
@@ -51,7 +51,7 @@
       },
       {
         "command": "sharpvoice.apply",
-        "title": "SharpVoice: Apply Voice Edit",
+        "title": "SharpVoice: Accept All Pending Changes",
         "enablement": "sharpvoice.canApply",
         "icon": "$(check)"
       },
@@ -70,6 +70,134 @@
         "command": "sharpvoice.movePanel",
         "title": "SharpVoice: Move Panel to Right Sidebar",
         "icon": "$(layout-sidebar-right)"
+      },
+      {
+        "command": "sharpvoice.acceptAll",
+        "title": "SharpVoice: Accept All Pending Changes",
+        "enablement": "sharpvoice.canApply",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "sharpvoice.revertAll",
+        "title": "SharpVoice: Revert All Pending Changes",
+        "enablement": "sharpvoice.canApply",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "sharpvoice.reviewChanges",
+        "title": "SharpVoice: Review Pending Changes",
+        "enablement": "sharpvoice.canApply",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "sharpvoice.document",
+        "title": "SharpVoice: Document Selection or File",
+        "enablement": "!sharpvoice.sessionActive && !activeEditorIsReadonly && isWorkspaceTrusted"
+      },
+      {
+        "command": "sharpvoice.comment",
+        "title": "SharpVoice: Comment Initial Selection",
+        "enablement": "!sharpvoice.sessionActive && !activeEditorIsReadonly && isWorkspaceTrusted"
+      },
+      {
+        "command": "sharpvoice.uncomment",
+        "title": "SharpVoice: Uncomment Initial Selection",
+        "enablement": "!sharpvoice.sessionActive && !activeEditorIsReadonly && isWorkspaceTrusted"
+      },
+      {
+        "command": "sharpvoice.explain",
+        "title": "SharpVoice: Explain Selection or File",
+        "enablement": "!sharpvoice.sessionActive && !activeEditorIsReadonly && isWorkspaceTrusted"
+      },
+      {
+        "command": "sharpvoice.format",
+        "title": "SharpVoice: Format Selection or File",
+        "enablement": "!sharpvoice.sessionActive && !activeEditorIsReadonly && isWorkspaceTrusted"
+      },
+      {
+        "command": "sharpvoice.fix",
+        "title": "SharpVoice: Fix Diagnostic",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.explainError",
+        "title": "SharpVoice: Explain Diagnostic",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.testThis",
+        "title": "SharpVoice: Generate Tests for Selection or Function",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.runTests",
+        "title": "SharpVoice: Run Workspace Test Task",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.related",
+        "title": "SharpVoice: Choose Related Context Files",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.editRelated",
+        "title": "SharpVoice: Edit Related Files",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.resume",
+        "title": "SharpVoice: Resume Saved Review",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.discardRecovery",
+        "title": "SharpVoice: Discard Saved Review",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.shortcuts",
+        "title": "SharpVoice: Configure Custom Shortcuts",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.explainChanges",
+        "title": "SharpVoice: Explain Pending Changes",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.acceptWorkspace",
+        "title": "SharpVoice: Accept All Pending Files",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.revertWorkspace",
+        "title": "SharpVoice: Revert All Pending Files",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.nextChange",
+        "title": "SharpVoice: Next Pending Change",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.previousChange",
+        "title": "SharpVoice: Previous Pending Change",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.acceptChange",
+        "title": "SharpVoice: Accept Current Change",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.revertChange",
+        "title": "SharpVoice: Revert Current Change",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
+      },
+      {
+        "command": "sharpvoice.jumpChange",
+        "title": "SharpVoice: Go to Pending Change",
+        "enablement": "isWorkspaceTrusted && !sharpvoice.sessionActive"
       }
     ],
     "configuration": {
@@ -89,6 +217,21 @@
             "Current unsaved document if within 32,000 characters."
           ],
           "description": "Code shared with your selected SharpVoice AI provider for explicit editor requests. No additional files are read."
+        },
+        "sharpvoice.shortcuts": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "description": "Exact spoken or typed phrases mapped to coding instructions. Built-in commands take priority. Configure personally or per workspace."
+        },
+        "sharpvoice.codingInstructions": {
+          "type": "string",
+          "default": "",
+          "maxLength": 8000,
+          "description": "Coding conventions added to bounded repository guidance. Current user requests and language-validity rules take priority."
         }
       }
     },
@@ -122,7 +265,7 @@
           "group": "navigation@91"
         },
         {
-          "command": "sharpvoice.apply",
+          "command": "sharpvoice.acceptAll",
           "when": "sharpvoice.canApply",
           "group": "navigation@91"
         },
@@ -130,6 +273,16 @@
           "command": "sharpvoice.cancel",
           "when": "sharpvoice.sessionActive",
           "group": "navigation@92"
+        },
+        {
+          "command": "sharpvoice.revertAll",
+          "when": "sharpvoice.canApply",
+          "group": "navigation@92"
+        },
+        {
+          "command": "sharpvoice.reviewChanges",
+          "when": "sharpvoice.canApply",
+          "group": "navigation@93"
         }
       ]
     },

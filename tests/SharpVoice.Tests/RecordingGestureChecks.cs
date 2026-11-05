@@ -25,6 +25,18 @@ internal static class RecordingGestureChecks
         }
         return Task.CompletedTask;
     }
+    public static Task ResumedToggle()
+    {
+        var toggle = new RecordingGestureRouter(true);
+        toggle.Process(new(DualHotkeyTransition.Pressed, VoiceMode.Dictation, false));
+        toggle.Process(new(DualHotkeyTransition.Promoted, VoiceMode.AskAi, false));
+        toggle.SetRecordingActive(false); // Editor capture is cancelled before general Ask resumes.
+        toggle.SetRecordingActive(true); // Native microphone readiness synchronizes the toggle again.
+        if (toggle.Process(new(DualHotkeyTransition.Released, VoiceMode.AskAi, false)).Transition != DualHotkeyTransition.None
+            || toggle.Process(new(DualHotkeyTransition.Pressed, VoiceMode.AskAi, false)).Transition != DualHotkeyTransition.Released)
+            throw new Exception("Resumed general Ask needs more than one press to stop.");
+        return Task.CompletedTask;
+    }
     public static Task Routing()
     {
         static void Check(bool value, string why) { if (!value) throw new Exception(why); }

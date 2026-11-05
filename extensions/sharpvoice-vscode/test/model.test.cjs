@@ -45,9 +45,9 @@ test('automatic large-file targets stay bounded and include cursor without expan
  assert.equal(target.context.cursor_offset,50000-target.snapshot.start);assert.ok(target.context.source_text.includes('target();'));
  assert.throws(()=>captureTarget({...snapshot,text,start:0,end:0},'document','edit'),/32,000/);
 });
-test('editor protocol 3 accepts updated frames and rejects older desktop frames',()=>{
- assert.equal(new FrameReader().push(Buffer.from('{"type":"hello","version":3}\n'))[0].version,3);
- assert.throws(()=>new FrameReader().push(Buffer.from('{"type":"hello","version":1}\n')),/Incompatible/);
+test('editor protocol 8 accepts updated frames and rejects older desktop frames',()=>{
+ assert.equal(new FrameReader().push(Buffer.from('{"type":"hello","version":9}\n'))[0].version,9);
+ for(const version of [1,4,5,6,7,8])assert.throws(()=>new FrameReader().push(Buffer.from(JSON.stringify({type:'hello',version})+'\n')),/Incompatible/);
 });
 test('automatic nearby targets retain code when cursor is inside a very long line',()=>{
  const {captureTarget}=require('../out/model');const text='x'.repeat(100000);

@@ -1,5 +1,5 @@
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.1.5',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.1.6',
     [switch]$SkipTests
 )
 $ErrorActionPreference = 'Stop'
@@ -101,6 +101,9 @@ try {
     Write-Host 'Building per-user installer, portable ZIP and update feed...'
     $packArgs = @('tool','run','vpk','--','pack','--packId','SharpVoice','--packVersion',$Version,'--packDir',$staging,'--mainExe','SharpVoice.exe','--packTitle','SharpVoice','--packAuthors','Rob Leonard','--runtime','win-x64','--channel','win-x64','--shortcuts','StartMenuRoot','--delta','None','--icon',(Join-Path $root 'src/SharpVoice.UI/Assets/microphone-neutral.ico'),'--releaseNotes',(Join-Path $root "docs/releases/v$Version.md"),'--outputDir',$packOutput)
     $null = Run-Tool $dotnet $packArgs (Join-Path $work 'pack.log')
+    # Publish the same VSIX that is embedded in the desktop plugin manager.
+    $pluginVersion = (Get-Content -LiteralPath (Join-Path $root 'extensions/sharpvoice-vscode/package.json') -Raw | ConvertFrom-Json).version
+    Copy-Item -LiteralPath (Join-Path $root 'src/SharpVoice.Platform.Windows/Assets/sharpvoice-vscode.vsix') -Destination (Join-Path $packOutput "sharpvoice-vscode-$pluginVersion-win32-x64.vsix")
     $assets = @(Get-ChildItem -LiteralPath $packOutput -File)
     if (-not ($assets.Name -match 'Setup\.exe$') -or -not ($assets.Name -match 'Portable\.zip$') -or -not ($assets.Name -contains 'releases.win-x64.json') -or -not ($assets.Name -match '\.nupkg$')) { throw 'Installer or update-feed assets are missing.' }
     foreach ($asset in $assets) { Copy-Item -LiteralPath $asset.FullName -Destination $output -Force }

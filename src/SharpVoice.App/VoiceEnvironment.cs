@@ -14,5 +14,6 @@ internal sealed class VoiceEnvironment
     public string? HistoryPath { get; init; }
     public string? ModelDirectory { get; init; }
     public string? WakeModelRoot { get; init; }
+    public string? EditorDiscoveryPath { get; init; }
     public bool EditorIntegration { get; init; } = true;
 }

@@ -2,6 +2,16 @@ using SharpVoice.UI;
 
 internal static class SuccessCueChecks
 {
+    public static Task QuestionAsset()
+    {
+        var wav = Read("follow-up-question");
+        Check(BitConverter.ToUInt16(wav, 22) == 1 && BitConverter.ToUInt32(wav, 24) == 44100 && BitConverter.ToUInt16(wav, 34) == 16, "Question cue must match PCM output.");
+        Check((wav.Length - 44) / 88200d is >= .26 and <= .28, "Question cue should be a short two-note chime.");
+        Check(Peak(wav) > 100 && Peak(wav) < 5000, "Question cue should be audible and restrained.");
+        Check(Energy(wav, .09, .14) == 0 && Energy(wav, 0, .07) > 0 && Energy(wav, .16, .24) > 0, "Question cue requires separated notes.");
+        foreach (var name in new[] { "recording-start", "recording-stop", "warning", "insertion-success" }) Check(!wav.SequenceEqual(Read(name)), "Question cue must be distinct.");
+        return Task.CompletedTask;
+    }
     public static Task Asset()
     {
         var success = Read("insertion-success");

@@ -62,6 +62,7 @@ internal static partial class WindowsHelpSmoke
         var changes = 0; var previewChanges = 0; var authRequests = 0;
         desktop.ConfigChanged = _ => changes++;
         desktop.InputPreviewChanged = _ => previewChanges++;
+        desktop.CanMonitorInput = () => false; // Isolate help actions from automatic Audio monitoring.
         desktop.SignInRequested = () => authRequests++;
         Win32.ShowWindow(window, 4); // Offscreen; never activate the user's desktop.
         for (var page = 0; page < ids.Length; page++)

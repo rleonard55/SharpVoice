@@ -42,7 +42,6 @@ internal sealed partial class SharpVoiceApp
         desktop.ShowAnswer(last?.Response ?? "Start speaking or type a request to begin this conversation.", last?.Model ?? "");
         desktop.SetAnswerConversation(view);
         desktop.SetAnswerStatus(last is null ? "New conversation · Kept only until SharpVoice exits" : "Conversation restored · Reply by voice or text");
-        desktop.SetAnswerInsertionAvailable(false);
     }
     private void RetireConversations()
     {

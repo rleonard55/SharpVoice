@@ -1,7 +1,7 @@
 namespace SharpVoice.Core;
 
 public sealed record ConversationScope(string Domain, string Binding, string Provider);
-public sealed record ConversationTurn(string Id, string Request, string Response, string Status, string Model, bool Omitted = false);
+public sealed record ConversationTurn(string Id, string Request, string Response, string Status, string Model, bool Omitted = false, string[]? Choices = null);
 public sealed record ConversationView(string Id, ConversationScope Scope, string Title, ConversationTurn[] Turns, bool Omitted, bool Retired = false);
 public sealed record ConversationSummary(string Id, string Title, string Domain, bool Retired);
 public sealed record ConversationLease(string ConversationId, string TurnId);
@@ -81,15 +81,16 @@ public sealed class ConversationStore
         }
         Changed?.Invoke(); return lease;
     }
-    public bool Complete(ConversationLease lease, string response, string status, string model)
+    public bool Complete(ConversationLease lease, string response, string status, string model, string[]? choices = null)
     {
+        if (choices is not null) { FollowUpChoices.Validate(choices); if (status != "Needs Clarification" && choices.Length > 0) throw new ArgumentException("Only questions can suggest replies."); }
         if (response.Length > 200000 || model.Length > 512 || status.Length > 200) throw new ArgumentException("Excessive conversation result.");
         lock (gate)
         {
             if (!threads.TryGetValue(lease.ConversationId, out var t) || t.Retired || t.Pending != lease.TurnId) return false;
             var i = t.Turns.FindIndex(x => x.Id == lease.TurnId); if (i < 0) return false;
             var original = t.Turns[i];
-            t.Turns[i] = original with { Response = response, Status = status, Model = model };
+            t.Turns[i] = original with { Response = response, Status = status, Model = model, Choices = choices?.ToArray() };
             t.Pending = null; t.Used = ++clock;
             try { Trim(t); TrimBudget(t); }
             catch { var restored = t.Turns.FindIndex(x => x.Id == lease.TurnId); if (restored >= 0) t.Turns[restored] = original; t.Pending = lease.TurnId; throw; }
@@ -134,7 +135,7 @@ public sealed class ConversationStore
         Changed?.Invoke();
     }
     private void Remove(string id) { threads.Remove(id); foreach (var key in selected.Where(x => x.Value == id).Select(x => x.Key).ToArray()) selected.Remove(key); }
-    private static int Size(Thread t) => t.Turns.Sum(x => x.Request.Length + x.Response.Length);
+    private static int Size(Thread t) => t.Turns.Sum(x => x.Request.Length + x.Response.Length + (x.Choices?.Sum(c => c.Length) ?? 0));
     private static void Trim(Thread t) { while (t.Turns.Count > 40) { t.Turns.RemoveAt(1); t.Omitted = true; } }
     private void TrimBudget(Thread current)
     {

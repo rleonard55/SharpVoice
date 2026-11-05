@@ -1,5 +1,43 @@
 # SharpVoice verification
 
+## Foreground Editor Dictation Hotkey — 2026-11-04
+
+Native AOT publish and non-recording bootstrap passed without warning/error diagnostics. Staged/portable/published SHA-256 match: **`cb33351488a9f7fa8a83c588c1ddd2821ed7a22cccfa94f2be12fb97250d850a`**. The launcher ready marker is present. Exit SharpVoice and run **Launch-SharpVoice.cmd**, then update the plugin through **Settings → General → Plugins** and reload VS Code. No running process was restarted or installed plugin/profile replaced. Nothing was published.
+
+Only Dictation routes through the plugin when a supported editor is foreground. Ask AI retains its general-question behavior, including promotion from an overlapping Dictation chord. The correlated protocol-4 handoff preserves configured hold/toggle shortcuts, captures fresh active-file name/language/selection, and uses the existing diff, explicit Apply and native Undo flow. Unavailable, cancelled, expired, disconnected and stale requests cannot fall back to pasting. The plugin subscribes while focused and reconnects after app restart; extension version is 0.2.1.
+
+Window-level routing visibly restores the current active source, including from the terminal/sidebar; it never uses a cached source when no active editor exists. Initial blanket terminal-refusal wording was removed after actual VS Code testing showed activeTextEditor persists there and the supported API exposes no focus-context query. Source remains unchanged until Apply.
+
+Managed build passed with zero warnings/errors; **198/198** application checks and **14/14** Node checks passed. Real isolated VS Code checks cover fresh C# context, correlated starts, inactive-window rejection, cancellation during asynchronous connection, diff-before-Apply, Apply/Undo, and focus loss during Apply. The packaged plugin installed and reinstalled as 0.2.1 in an isolated real VS Code profile. Full native Settings/help regression passed, including the prior response-pill preferences and layout fixes.
+
+The actual app/authenticated-pipe fixture passed custom F8 hold and toggle separately: early release, focus loss, expiry, stale requests during a newer capture, stop and promotion to general Ask. It used synthetic capture, a verified cached model, temporary discovery/history, injected editor context, and rejected network/selection/paste boundaries; no live microphone, credentials, clipboard or user source was used.
+
+Independent review found a lost toggle latch during Ask promotion and inactive-window pipe ownership after Apply. Both were corrected; the real-editor Apply regression failed with the ownership fix removed and passed after restoration. Re-review found no remaining concrete correctness issues. Early test-harness failures (duplicate variable and registering the same Win32 class twice in one process) were corrected; hold/toggle native fixtures run in separate processes. Evidence: ignored `.build-cache/editor-hotkey-*`. Physical keyboard/device/provider acceptance remains in `docs/windows-smoke-test.md`.
+
+## Response Pill Actions — 2026-11-04
+
+Removed the answer pill's Insert action and its insertion callbacks/workflow. Swapped Speech and Stop: the wider footer buttons are now Speech, Replay, Copy, Close, Stop. Writing/edit requests retain their normal insertion routing. The verbosity setting is Settings → General → Smart Ask AI → Response Length.
+
+The native layout regression failed on the old Insert button before implementation. The final managed build has zero warnings/errors; **196/196** checks and the full isolated native UI suite pass. New checks assert no Insert control and the left-to-right button order. Captured layout was inspected. Native publication and bootstrap pass; staged/portable/published SHA-256 match: **`85850c0a621074c2e70ca8e65a7cb68c8461fa9e47fa58bb8fa8f7342e6dafd7`**. The launcher update is ready; the running app was not restarted. Evidence: `.build-cache/answer-actions-*`.
+
+## Diagnostics Panel Coverage — 2026-11-04
+
+Extended the settings card from client y=525 to y=544 so Diagnostics (y=500–536) has eight pixels of colored padding beneath it and stays separate from Last Result at y=550. A native rendered-pixel regression reproduced the overflow before the fix and passes in light/dark themes. Captured layout was inspected. Managed build has zero warnings/errors, the complete suite passes **196/196**, and the full isolated native UI suite passes (`.build-cache/diagnostics-panel-*`).
+
+Native AOT publication and bootstrap pass without warnings/errors. Staged/portable/published SHA-256 match: **`b63ff7cdc2a140573e28ff0d1c58ed3109823457776dc9852e652ef9611fc2c1`**. Launcher ready marker verified; the running app was not restarted. Exit SharpVoice and run **Launch-SharpVoice.cmd** to apply.
+
+## Response Pill Dismissal, Speech and Length — 2026-11-04
+
+Clicking outside the non-activating answer pill now dismisses it through the existing speech/reply cancellation path. A temporary forwarding mouse hook detects clicks even before the pill receives focus. Child controls and menus owned by the pill remain usable; queued clicks cannot dismiss a newly reopened pill or be lost when a follow-up updates the same visible pill.
+
+Smart Ask settings separately configure Read Answers Aloud and Brief/Conversational/Detailed response length. The pill's speech toggle persists the same preference and stops current speech when disabled. Brief is the default and instructs providers to return only the year for a year-only question. Explicit user requests take precedence, and insertion content is not shortened. Existing configurations retain speech enabled until changed.
+
+Final managed build completed with zero warnings/errors; the complete executable suite passes **196/196**. The isolated native UI suite passes preferences, speech toggle, inside/outside clicks before focus, stale click/reply handling, real EDIT context menus, and light/dark themes. Captures were inspected. Independent review reproduced a context-menu dismissal bug; a failing native regression was added before the ownership fix, and review found no remaining blockers. Evidence: `.build-cache/answer-preferences-final-tests.log`, `answer-preferences-final-ui.log`, `answer-preferences-menu-red.log`, `answer-preferences-menu-build.log`.
+
+Native AOT publication completed with no warnings/errors, and the resulting executable passed `--release-info` without starting another user session. Staged, portable and isolated published executable hashes match: **`147f12c97d0daf7865e9e9a89751344b2217d4c866e5693c004d1d981805570e`**. The launcher ready marker is present. Exit SharpVoice and run **Launch-SharpVoice.cmd** to apply. Native build evidence: `.build-cache/answer-preferences-aot-isolated.log`. Earlier packaging attempts hit WSL environment lookup, restore delay and locked shared intermediate files; the final build used isolated intermediates. The initial full suite was invoked through dotnet.exe and failed five subprocess/apphost checks; corrected executable invocation passed all checks, and both logs are retained.
+
+Automated validation uses temporary settings, synthetic provider responses and an isolated desktop. Physical pointer/audio behavior and actual model response length remain manual acceptance checks in `docs/windows-smoke-test.md`; the running app and real preferences were not changed.
+
 ## Speech-Triggered Selected-Model Whisper Wake — 2026-11-01
 
 The runtime keyword listener is replaced in both the app and diagnostic utility by local speech detection followed by bounded, progressive Whisper prefix checks. The app shares its existing WhisperEngine and selected SpeechModel with transcription; changing the model/language restarts wake preparation. Silence does not invoke Whisper. Recording-end activity runs on a separate worker, so slow/canceled prefix inference does not block speech ending. Preparation reuses/verifies the existing Silero asset and no longer requests the keyword-model archive. Historical keyword code remains reachable only from offline comparison tests. Wake opt-in/defaults, saved phrases, noise gate, hotkeys, readout/auth/editor guards and provider routing are retained.
@@ -779,3 +817,100 @@ Follow [windows-smoke-test.md](windows-smoke-test.md) for the interactive checks
 - Local complete offline suite: **195/195 passed**; isolated onboarding and diagnostics smoke checks passed. Source/history and release-fix secret scans found no leaks.
 - GitHub Actions [run 41775080387](https://github.com/rleonard55/SharpVoice/actions/runs/41775080387) passed all offline/native checks, sanitized Native AOT packaging, bundled-model offline verification, isolated install/corrupt-update/upgrade/downgrade/uninstall checks and draft asset upload from commit `c4f98b970db3d33c11d755d08212ff7c3a906e2b`. All seven uploaded asset SHA-256 digests matched the checksum manifest, including the manifest's own digest against the downloaded file. Release notes and target revision matched reviewed source.
 - Published [v0.1.5](https://github.com/rleonard55/SharpVoice/releases/tag/v0.1.5) as latest stable. Anonymous verification confirmed public/latest state and HTTP 200 installer, portable ZIP and win-x64 updater-feed downloads resolving to v0.1.5. No local running app was restarted or replaced.
+
+### Working-file review (2026-11-04)
+
+Extension 0.2.2 inserts code results into the current working file, highlights pending changes, and allows subsequent requests before Accept All/Revert All. Review history is per open document and remains available across desktop reconnects. Manual overlaps are retained as conflicts; independent changes still reverse. Accepting does not save, and pending tracking ends on document close or extension reload.
+
+Focused unit coverage includes sequential and overlapping AI edits, manual rebasing/conflicts, duplicate-result races, lost receipts, file switching, CRLF normalization, complete Unicode ranges and Undo review restoration. The isolated native VS Code fixture verifies repeated requests, fresh context, manual-edit preservation, one-step reversal Undo, CRLF/emoji reversal, stale-result cancellation and bridge receipt handling. It uses a hidden desktop and temporary profile; the user's live editor is untouched.
+
+Final verification: 35/35 extension unit tests, isolated native VS Code integration fixture, and 198/198 managed desktop checks pass. Desktop build: zero warnings/errors. Run desktop subprocess tests through `SharpVoice.Tests.exe`; invoking its DLL with `dotnet` changes `Environment.ProcessPath` and breaks self-spawning fixtures. Installer tests now verify the version read from the installed archive rather than hard-coding the previous release.
+
+VSIX 0.2.2 SHA-256: `9bdbe156f9ae16618ae6dcbbcf8e0fa3e8a164609b6872c7626613cded90bd8a`. Archive CRCs, packaged compiled JS/media, manifest version and equality with the desktop's embedded VSIX asset are verified. Delivery: `extensions/sharpvoice-vscode/sharpvoice-vscode-0.2.2-win32-x64.vsix`. Install it through VS Code's **Extensions → … → Install from VSIX**, then reload. This behavior uses existing desktop protocol 4; the running user app/editor was not restarted or modified.
+
+
+### Exact editor shortcuts, Explain and Format (2026-11-04)
+
+Extension **0.2.3 / desktop protocol 5** recognizes exact Document, Comment, Uncomment, Explain and Format spoken/typed code requests and exposes Command Palette actions. Targets use the initial selection. Document/Explain use the whole file when initially unselected (existing 32,000-character AI bound); native Comment/Uncomment do nothing without an initial selection. Native comments use language configuration and enter pending working-file review. Explain uses AnswerConversation and publishes its answer without applying code. Format invokes native selection/document formatting and uses native Undo; its edits remain ordinary editor edits rather than AI-owned review, preserving user input during async formatter cancellation.
+
+Review regressions reproduced and fixed: documentation clarification could retarget a later highlight; async formatting cancellation could misclassify one manual edit as AI-owned and let Revert All delete it. Tests now verify initial targeting throughout clarification and preserve manual typing during canceled formatting.
+
+Final validation: **49/49 extension tests**, **199/199 desktop checks**, isolated native VS Code checks across C#/Python/HTML/CSS, native JSON formatting/Undo, read-only explanation completion, and authenticated desktop native-shortcut/no-selection bridge tests all pass. Managed build and standalone Native AOT publication passed without warnings/errors. Standalone release-info bootstrap passed.
+
+Staged app SHA-256: `d3ac7cbe1b52e3f57171fc867aadc750bc4f4d66baaaacd6555df905b3d74b49`. Extension SHA-256: `7e4b8955634a57585dd6840500541b398c6260f66e15f1eab42b27ff573a1168`. VSIX CRCs, manifest version, compiled JS/media contents and equality with the desktop's embedded extension asset are verified. Staged executable/PDB/native dependency hashes match publish output; update.ready was written only after verification. User app/editor were not restarted, stopped or installed into.
+
+Apply: exit SharpVoice from the tray, run **Launch-SharpVoice.cmd**, then **Settings → General → Plugins → Update** and reload VS Code. Alternative extension delivery: `artifacts/extensions/sharpvoice-vscode-0.2.3-win32-x64.vsix`. App and extension must be updated together.
+
+
+### File/language validity guards (2026-11-04)
+
+Extension **0.2.4**, still protocol **5**, refuses Comment and inline Document for strict JSON, JSON Lines, CSV and TSV with an explanatory message before editing or sending an exact shortcut to an AI provider. The desktop also refuses these incompatible shortcut results before generation. JSONC, including settings.json in JSONC mode, retains comments. Explain/Format and no-initial-selection no-ops remain available. Provider instructions now explicitly reject forbidden syntax and documentation metadata workarounds.
+
+Generated JSON/JSON Lines edits are validated as complete candidate documents before the apply handshake, including unselected surrounding text. Safe JSON Uncomment repair is planned locally and parse-validated before insertion; string literals containing URLs or comment-like text are preserved. Prose or incomplete repairs that would leave invalid JSON are refused. Original source/pending edits stay intact on rejection. Other language formats retain native support and provider instructions; no universal compiler or schema validation is claimed.
+
+Regressions failed before implementation and now pass. Final results: **60/60 extension tests**, **200/200 desktop checks**, native VS Code JSON rejection/repair/JSONC checks plus all existing shortcut/working-file checks. Fresh scoped code review found no important defects. Managed build and standalone Native AOT publish passed without warnings/errors; standalone release-info bootstrap passed.
+
+VSIX SHA-256: `53a2b702ca997c674e8ebea17dd7430b0f8bc5d57603695cd8e365bf53120787`. Staged app SHA-256: `39a3cf9d9b323223187cc111a415c5abd6fb7c8b28dce96bb585867de2771362`. Archive CRCs/compiled assets/manifest and embedded/distributable equality pass. Executable/PDB/native dependency hashes match publish output; update.ready was written after verification. User app/editor were not restarted or installed into.
+
+Apply with **Exit SharpVoice → Launch-SharpVoice.cmd → Settings → General → Plugins → Update → Reload VS Code**. Distributable extension: `artifacts/extensions/sharpvoice-vscode-0.2.4-win32-x64.vsix`.
+
+
+### 2026-11-04 — Highlighted follow-up questions and quick replies
+
+Implemented for both plugin Ask AI and code-edit clarification questions. Active questions appear above the composer in a theme-aware card; model-supplied suggested replies render as literal buttons (at most four, each at most 200 characters). Typed and voice answers remain available. Plain native answer popups retain their existing response format. New live questions play a separate embedded 270 ms two-note cue when audio feedback is enabled; restoration/refresh does not replay it.
+
+Verification:
+- TypeScript compilation and 66/66 extension tests passed, including literal hostile-text rendering, code-question preservation across workspace refresh, duplicate/stale choices, initial file context, interrupted-submit retry, voice routing, and canceled historical code questions.
+- Release managed build passed with zero warnings/errors; 204/204 desktop checks passed. New checks exercise structured provider instructions/results, choice bounds, plain-popup isolation, canceled UI delivery and distinct PCM asset properties.
+- Isolated native Windows VS Code host passed Ask AI and code quick replies alongside all existing working-file review, shortcut, language-policy, cancellation, focus and receipt regressions. See `.build-cache/followup-host-run.log`.
+- Independent review found canceled-question and interrupted-choice races; regression tests reproduced them before fixes. Ask replies now commit and cue only inside cancellation-guarded UI acceptance. No remaining review findings.
+- Extension 0.2.5 requires editor protocol 6. VSIX CRC, manifest, compiled scripts, media and README match current sources; the bundled package is identical. Native AOT publication succeeded; its noninteractive release diagnostics exited successfully. The exact VSIX and question WAV bytes were verified inside the executable.
+- Matching app/plugin delivery is staged under `artifacts/aot-update` and `artifacts/extensions`; SHA-256s and staged-file verification are recorded in `.build-cache/followup-delivery.json`. Running app/editor were left intact. Exit SharpVoice, run `Launch-SharpVoice.cmd`, update/reinstall the plugin from Settings → General → Plugins, and reload VS Code.
+
+No live-provider account or live microphone was used in these checks. Cue identity/format and native asset embedding were verified; subjective listening and physical speaker playback were not tested.
+
+
+### 2026-11-04 — Ten shared IDE workflow features (extension 0.3.0 / protocol 7)
+
+Delivered individual pending-hunk controls/CodeLens, diagnostic Fix/Explain Error, explicit related-file context and coordinated existing-file edits, Test This/native test tasks, local review recovery, voice/text symbol navigation, custom shortcut settings, read-only Explain Changes, native candidate pickers, and bounded project conventions. The shared VSIX targets VS Code, Insiders and experimental Antigravity; native host verification here uses isolated VS Code only.
+
+Validation:
+- TypeScript compiles; **115/115 extension tests pass**. New pure/model/controller regressions cover individual acceptance/reversal and stale identities, checkpoint parsing/size/untitled identities/external conflicts, deferred-review protection, source-under-test retention, project path/realpath/config bounds and freshness, native symbol/diagnostic selection, literal panel rendering, custom shortcut precedence/provenance, task exit status and listener cleanup, coordinated receipt waiting/cancellation/partial insertion and lost receipts.
+- Final managed Release build has **zero warnings/errors**; **205/205 desktop checks pass**, including new bounded related-source/guidance serialization. Existing language rules, JSON validation, editing/voice/provider and follow-up checks remain green.
+- Expanded isolated native Windows VS Code fixture passes. Actual native API checks include per-hunk CodeLens and partial review, stale controls, read-only explanations, registered fixture symbols/diagnostics through native providers, declaration navigation, Fix targeting, and temporary-profile custom shortcut provenance. Existing inline edit, Undo, multi-request, language shortcut, clarification, focus/cancellation and receipt cases also pass. No live editor profile, clipboard, account or microphone was changed.
+- Independent review found seven material gaps; all were fixed. Source context now survives Test This validation, deferred recovery cannot be overwritten, unavailable untitled checkpoints persist, queue terminal/timeout paths report local insertion versus acknowledged files, prototype names remain normal instructions, related text is version-bound at read time, and untitled targets retain selected/personal guidance. Native testing additionally caught DocumentSymbol compatibility metadata hiding selectionRange; a regression/fix and successful native rerun confirm declaration navigation. Diagnostic prompts honor the existing 4,000-character request bound. Detailed report/resolution: `.build-cache/ide-expansion/review.md` and `review-resolution.md`.
+- Native AOT publication succeeded; noninteractive release diagnostics exits zero. VSIX CRC, version, packaged compiled scripts/media/README and equality with the desktop's bundled resource were checked. The final executable contains the exact VSIX bytes and was published after the final editor bridge source change. Matching executable/PDB/native dependencies were copied and SHA-256 verified before writing `artifacts/aot-update/update.ready`. Delivery manifest: `.build-cache/ide-expansion/delivery.json`; distributable package: `artifacts/extensions/sharpvoice-vscode-0.3.0-win32-x64.vsix`.
+
+Operational limits: related context is explicitly selected and bounded to four sources × 8,000 characters; each coordinated target is at most 32,000 characters. Coordinated edits are sequential and disclose partial completion, with each file independently pending for review. Test generation creates pending edits in a chosen test target; running tests requires selecting an existing native workspace task. Native task exit codes are real results; diagnostic counts may settle asynchronously and are not compilation proof. Checkpoints store source/baselines locally, not conversations/audio, with a 2 MiB limit; Resume never overwrites source and changed files become conflicted. Untitled targets can be matched explicitly to an open same-content document; missing targets remain available. Actual provider quality, physical voice interaction and Antigravity runtime compatibility remain manual acceptance checks.
+
+Activate with **Exit SharpVoice → Launch-SharpVoice.cmd → Settings → General → Plugins → update/reinstall for each editor → reload that editor**. User app/editor processes were left running throughout staging.
+
+
+### 2026-11-04 — Automatic Audio monitoring and IDE Ask shortcut (extension 0.3.1 / protocol 8)
+
+Removed Preview Applied Mic. Visible, restored Audio Settings automatically monitors the saved microphone while the app is idle and available. The indicator reports monitoring, suspension or unavailable input. Monitoring uses existing local recorder preview, without transcription or provider calls. Draft device choices still require Apply. Leaving Audio, hiding/minimizing Settings, pause, voice operations and answer playback suspend monitoring; eligibility resumes it. A failed device is retried only after a new eligibility interval.
+
+The configured Ask AI shortcut now routes through the focused supported IDE into read-only workspace Ask, using saved hold/toggle gestures. It can run without source; Include Current File remains explicit. Outside a supported IDE, desktop Ask behavior remains available. Correlated ID/client/mode/focus/expiry checks reject late or stale starts; nested Ask cancels a Dictation handoff/capture before starting Ask. Cancel, hide, disconnect and focus loss clean up capture ownership.
+
+Validation:
+- TypeScript compilation and **122/122 extension tests pass**, including cancellation during connect, duplicate delivery, optional source, no editor source, workspace synchronization during panel opening, correlated stop/cancel controls, and attached source closure/change during panel reveal.
+- **205/205 desktop checks pass**. Hidden native UI monitoring fixture passes with fake audio and no physical mic. Existing settings default/custom and help smoke checks passed after automatic monitoring changes.
+- Authenticated native app/pipe fixtures pass for both hold and toggle: release/focus/expiry rejection, duplicate Ask acceptance, nested Dictation-to-Ask promotion, disconnected plugin handling, outside-editor Ask and no source insertion/clipboard capture inside the IDE. Fake audio and network rejection isolate these checks.
+- Expanded isolated native VS Code fixture passes, including real extension Ask routing with no implicit source, stop/cancel, plus existing working-file changes, review, shortcuts, language guards and follow-up workflows.
+- Independent review identified an attached-source race after asynchronous panel reveal. A final freshness check and close/edit regression fix it. Review: `.build-cache/auto-audio-ask-review.md`.
+
+Native AOT publication and noninteractive release diagnostics succeed. The final executable contains the exact matching VSIX bytes. Package CRC, version and all compiled scripts/media/README match current files; staged files are SHA-256 verified before the launcher readiness marker is written. Delivery checks and hashes are recorded in `.build-cache/ask-audio-delivery.json`. The matching desktop and VSIX must be activated together: **Exit SharpVoice → Launch-SharpVoice.cmd → Settings → General → Plugins → update/reinstall → reload editor**. Antigravity uses the shared package; its actual host compatibility remains experimental. Physical microphone/voice/provider behavior remains manual acceptance testing.
+
+
+### 2026-11-05 — Ask hotkey editor identity and highlighted code (extension 0.3.2 / protocol 9)
+
+The reported Explain request was captured as general Ask with no source whenever Include Current File was unchecked. The extension omitted context, the desktop discarded any context under that setting, and generation passed only optional context text without file identity. Ask now automatically sends filename, extension, language and exact initial highlighted text. Without a selection it sends metadata with empty source. Include Current File adds bounded surrounding/file content using the existing context setting. All Ask entry points use these semantics; contextual requests are scoped to the file instead of the desktop's general thread. With no active file, general Ask remains available. Ask remains read-only.
+
+Validation:
+- The filename/selection regressions failed before the fix; final TypeScript compilation and **123/123 extension tests pass**. Existing optional file content, no-source, delayed panel reveal, stale attached documents, cancellation and focus behavior remain covered.
+- Final managed Release build: **zero warnings/errors**. **206/206 desktop checks pass**, including a fake HTTP provider test that inspects the actual structured Ask request for filename, .js extension, JavaScript language and exact selected text. It also verifies that extra unselected text reaches the provider only with Include Current File enabled. Filename-only requests contain no unselected code.
+- Native authenticated desktop fixtures pass for **hold and toggle**, retaining selection/identity in published workspace state while IncludeFile is false, using editor_ask scope and performing no clipboard selection/insertion. The full isolated native VS Code fixture passes, including hotkey and panel Ask metadata/selection, source preservation, stop/cancel and existing editing/review/language/follow-up workflows.
+- Read-only review caught metadata being dropped by the structured-answer clone; copying editorContext into that clone fixes the actual provider path and the provider-request test verifies it. Initial obsolete native fixture expectations for absent context were updated to the new contract. An overlapping build attempt encountered Windows test-process file locks; after the isolated process exited, a clean sequential build completed with no warnings/errors.
+- Native AOT publication and noninteractive release diagnostics succeed. VSIX CRC, manifest, compiled scripts/media/README, equality with the bundled resource, exact VSIX bytes in the executable and native build freshness after the structured-clone fix were verified. Staged files are SHA-256 verified before the launcher marker. Manifest: `.build-cache/ask-context-delivery.json`; package: `artifacts/extensions/sharpvoice-vscode-0.3.2-win32-x64.vsix`.
+
+Activate the matching pair: **Exit SharpVoice → Launch-SharpVoice.cmd → Settings → General → Plugins → update/reinstall → reload editor**. No running user app/editor, physical microphone or live provider account was changed. Antigravity shares the VSIX; its actual native host remains experimental.

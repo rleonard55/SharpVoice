@@ -19,6 +19,7 @@ public sealed unsafe class GlobalKeyboardHook : IDisposable
     private RecordingGestureRouter gesture = new(false);
     private bool externalRecording;
     public void SetExternalRecording(bool active) { externalRecording = active; gesture.SetExternalRecording(active); }
+    public void SetRecordingActive(bool active) => gesture.SetRecordingActive(active);
     public void ResetRecordingGesture() => gesture.Reset();
     private HotkeyCaptureState? capture;
     private Action<int?>? captureCompleted;

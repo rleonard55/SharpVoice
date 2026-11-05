@@ -75,7 +75,7 @@ public sealed partial class EditorBridge : IDisposable
                 if (GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var peerPid) == 0) throw new IOException("Cannot identify the editor peer.");
                 using var peer = Process.GetProcessById(checked((int)peerPid));
                 var peerScope = peerPid.ToString("x") + "-" + peer.StartTime.ToUniversalTime().Ticks.ToString("x");
-                await wire.WriteAsync(new("hello", Message: "SharpVoice editor protocol 3", HostId: hostId, ClientId: clientId), handshake.Token);
+                await wire.WriteAsync(new("hello", Message: $"SharpVoice editor protocol {EditorProtocol.Version}", HostId: hostId, ClientId: clientId), handshake.Token);
                 while (!stop.IsCancellationRequested)
                 {
                     var frame = await wire.ReadAsync(stop.Token); if (frame is null) break;
@@ -91,6 +91,7 @@ public sealed partial class EditorBridge : IDisposable
             finally { if (owned && Interlocked.CompareExchange(ref active, null, wire) == wire) disconnected(); }
         }
     }
+    public string? ConnectedClientId => Volatile.Read(ref active) is null ? null : Volatile.Read(ref activeClient);
     public async Task SendAsync(EditorFrame frame)
     {
         var wire = active ?? throw new IOException("VS Code disconnected.");

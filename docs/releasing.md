@@ -7,8 +7,8 @@ Publish a new version only when the owner explicitly requests a release. Routine
 Install the .NET 10 SDK, Visual Studio 2022 C++ build tools and the Windows SDK. From the repository root:
 
 ```powershell
-./scripts/Build-Release.ps1 -Version 0.1.5
-./scripts/Test-ReleaseLifecycle.ps1 -ReleaseDirectory artifacts/releases/0.1.5
+./scripts/Build-Release.ps1 -Version 0.1.6
+./scripts/Test-ReleaseLifecycle.ps1 -ReleaseDirectory artifacts/releases/0.1.6
 ```
 
 `Build-Release.ps1` runs the complete offline suite through its Windows executable, publishes Native AOT with mapped source paths and native debug symbols disabled, checks that the executable contains neither the builder's project path nor home path, verifies its non-recording bootstrap/version command, then packages only the executable, verified Tiny Q5 English model, SharpVoice MIT license and public redistribution notices. The model is fetched from the official whisper.cpp Hugging Face repository into ignored build cache and SHA-256 checked before packaging. A native `--verify-bundled-model` check uses an isolated empty cache and blocks HTTP to prove first-run resolution works offline. The pinned SDK and packaging tool are both Velopack 1.2.161. `-SkipTests` is for local packaging iterations after a fresh complete test run; CI never uses it.
@@ -21,6 +21,7 @@ Packages appear in `artifacts/releases/<version>/`:
 - `SharpVoice-win-x64-Portable.zip`: self-contained portable distribution with updater metadata.
 - `SharpVoice-<version>-win-x64-full.nupkg`: verified full update package.
 - `releases.win-x64.json`, `assets.win-x64.json`, `RELEASES-win-x64`: metadata required on the same GitHub release.
+- `sharpvoice-vscode-<plugin-version>-win32-x64.vsix`: the same IDE plugin bundled in the desktop app.
 - `SHA256SUMS.txt`: asset hashes.
 
 Close a development copy from its tray before reviewing an installed version; both copies intentionally use the same single-instance mutex. Installations preserve the user's `.sharpvoice` preferences, protected credentials and model cache. Uninstall does not erase that directory. A saved Start on Sign-In setting is refreshed to the installed stable launcher. Uninstall removes only an exact startup command belonging to that installation.

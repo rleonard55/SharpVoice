@@ -3,9 +3,9 @@ namespace SharpVoice.App;
 internal sealed partial class SharpVoiceApp
 {
     internal long LastUpdateActivity { get; private set; } = Environment.TickCount64;
-    internal bool UpdateIdle => phase == Phase.Idle && !authBusy && !editorSession.Busy && !pendingVoiceStart
+    internal bool UpdateIdle => phase == Phase.Idle && !authBusy && !editorSession.Busy && !pendingVoiceStart && !editorHotkey.Pending
         && work.IsCompleted && authWork.IsCompleted && preload.IsCompleted && speechWork.IsCompleted
-        && connectedCancellation is null && answerInsertion is null && WakeUpdateIdle;
+        && connectedCancellation is null && WakeUpdateIdle;
     private bool WakeUpdateIdle
     {
         get

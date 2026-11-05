@@ -20,5 +20,6 @@ public sealed class RecordingGestureRouter(bool toggle)
         else if (input.Transition == DualHotkeyTransition.Released) stoppingGesture = false;
         return input with { Transition = transition };
     }
-    public void Reset() { recording = false; stoppingGesture = true; }
+    public void SetRecordingActive(bool active) { recording = active; stoppingGesture = !active; }
+    public void Reset() => SetRecordingActive(false);
 }

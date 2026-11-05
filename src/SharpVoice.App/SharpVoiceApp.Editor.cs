@@ -10,8 +10,9 @@ internal sealed partial class SharpVoiceApp
     private EditorBridge? editorBridge;
     private Timer? editorTimer;
     private WindowTarget? editorWindow;
-    private TaskCompletionSource<bool>? editorValidated;
+    private TaskCompletionSource<EditorFrame>? editorValidated;
     private string editorValidationNonce = "";
+    private bool editorCustomExpanded;
     private string editorThread = "";
     private ConversationLease? editorTurn;
     private string EditorDisplayName => editorWindow?.ProcessName.StartsWith("antigravity", StringComparison.OrdinalIgnoreCase) == true ? "Antigravity" : "VS Code";
@@ -20,10 +21,16 @@ internal sealed partial class SharpVoiceApp
     {
         try
         {
-            editorBridge = new(EditorBridge.DefaultDiscoveryPath, HandleEditorFrameAsync, () => desktop.Post(WorkspaceDisconnected), conversations.HostId);
+            editorBridge = new(environment.EditorDiscoveryPath ?? EditorBridge.DefaultDiscoveryPath, HandleEditorFrameAsync, () => desktop.Post(WorkspaceDisconnected), conversations.HostId);
             editorBridge.Start();
             editorTimer = new Timer(_ => desktop.Post(() =>
             {
+                if (editorHotkey.Pending && (editorHotkey.Expired(DateTimeOffset.UtcNow) || !EditorHotkeyFocused()))
+                {
+                    CancelEditorHotkey(); desktop.ResetRecordingGesture();
+                    desktop.SetStatus("Editor handoff cancelled or timed out · Retry in the source editor. No text was inserted.", true);
+                }
+                if (editorHotkey.Active && editorHotkey.Mode == VoiceMode.AskAi && workspaceAsking && !EditorHotkeyFocused()) Cancel();
                 if (editorSession.Busy && (editorSession.IsExpired(DateTimeOffset.UtcNow) || editorSession.State != "applying" && !EditorWindowFocused())) Cancel();
             }), null, 500, 500);
         }
@@ -31,7 +38,7 @@ internal sealed partial class SharpVoiceApp
     }
     private bool EditorWindowFocused()
     {
-        var current = WindowTarget.Capture();
+        var current = environment.CaptureTarget();
         return editorWindow is not null && current.Handle == editorWindow.Handle && current.ProcessId == editorWindow.ProcessId;
     }
     private Task<EditorFrame> HandleEditorFrameAsync(EditorFrame frame, CancellationToken ct)
@@ -39,22 +46,36 @@ internal sealed partial class SharpVoiceApp
         var completion = new TaskCompletionSource<EditorFrame>(TaskCreationOptions.RunContinuationsAsynchronously);
         desktop.Post(() =>
         {
+            var previousEditorRequest = editorSession.Busy ? editorSession.Id : null;
+            var previousWorkspaceAsking = workspaceAsking;
             try
             {
                 ct.ThrowIfCancellationRequested(); lifetime.Token.ThrowIfCancellationRequested();
                 LastUpdateActivity = Environment.TickCount64;
+                if (frame.Type == "hotkey_error")
+                {
+                    if (editorHotkey.Pending && frame.Id == editorHotkey.Id && frame.ClientId == editorHotkeyClient)
+                    { CancelEditorHotkey(); desktop.ResetRecordingGesture(); desktop.SetStatus(frame.Message ?? "Editor context unavailable. No text was inserted.", true, isError: true); }
+                    completion.TrySetResult(new("ack", frame.Id)); return;
+                }
                 if (frame.Type.StartsWith("workspace_", StringComparison.Ordinal)) { HandleWorkspace(frame); completion.TrySetResult(new("ack", frame.Id)); return; }
                 if (frame.Type == "start")
                 {
                     if (phase != Phase.Idle || authBusy || desktop.IsPaused || editorSession.Busy) throw new InvalidOperationException("SharpVoice is busy or paused. Finish or cancel the current operation first.");
+                    var fromHotkey = frame.Id == editorHotkey.Id;
+                    if (editorHotkey.Pending && !fromHotkey) throw new InvalidOperationException("A desktop hotkey is waiting for editor context.");
+                    if (fromHotkey && (frame.ClientId != editorHotkeyClient || !EditorHotkeyFocused() || editorHotkey.Mode != VoiceMode.Dictation || frame.Mode != "dictate" || frame.Instruction is not null || !editorHotkey.Accept(frame.Id, DateTimeOffset.UtcNow)))
+                        throw new InvalidOperationException("The editor hotkey request has expired or focus changed.");
+                    // A cancelled/expired correlated start must not be accepted as an ordinary plugin command.
+                    if (frame.State == "hotkey" && !fromHotkey) throw new InvalidOperationException("The editor hotkey request has expired.");
                     BindWorkspace(frame);
-                    var window = WindowTarget.Capture();
+                    var window = environment.CaptureTarget();
                     if (!EditorPlugins.IsSupportedEditor(window.ProcessName)) throw new InvalidOperationException("Focus a local VS Code or Antigravity source editor first.");
                     var effective = WritingTools.Resolve(config, window.ProcessName);
-                    if (effective.Backend == "none") throw new InvalidOperationException("Choose an AI provider in SharpVoice AI & Models or this editor's app profile first.");
+                    if (effective.Backend == "none" && frame.Instruction is not null && EditorShortcuts.Match(frame.Instruction) is not ("comment" or "uncomment" or "format")) throw new InvalidOperationException("Choose an AI provider in SharpVoice AI & Models or this editor's app profile first.");
                     if (frame.Instruction is null && !microphoneReady || frame.Context is null) throw new InvalidOperationException("Editor context or microphone is unavailable.");
-                    editorSession.Start(frame.Id, frame.Mode ?? "", frame.Context, DateTimeOffset.UtcNow); editorWindow = window;
-                    recordingConfig = effective with { RecordingGesture = "toggle" }; recordingModel = "";
+                    editorSession.Start(frame.Id, frame.Mode ?? "", frame.Context, DateTimeOffset.UtcNow); editorCustomExpanded = frame.State == "expanded"; editorWindow = window;
+                    recordingConfig = fromHotkey ? effective : effective with { RecordingGesture = "toggle" }; recordingModel = "";
                     workspaceMode = frame.Mode == "edit" ? "edit" : "dictate"; workspaceContext = frame.Context; workspaceIncludeFile = false;
                     workspaceConversation = ""; editorThread = WorkspaceView().Id; workspaceMessage = frame.Instruction is null ? "Starting microphone · Wait for the tone…" : "Working…";
                     if (!string.IsNullOrWhiteSpace(frame.Instruction))
@@ -77,7 +98,7 @@ internal sealed partial class SharpVoiceApp
                             if (editorValidated is not null && !editorValidated.Task.IsCompleted && frame.Message == editorValidationNonce)
                             {
                                 if (frame.Context is not null) editorSession.RefreshContext(frame.Id, frame.Context);
-                                editorValidated.TrySetResult(true);
+                                editorValidated.TrySetResult(frame);
                             }
                             break;
                         case "clarify":
@@ -95,24 +116,33 @@ internal sealed partial class SharpVoiceApp
                             if (!EditorWindowFocused()) throw new InvalidOperationException("Focus the original editor before applying.");
                             editorSession.BeginApply(frame.Id);
                             if (editorTurn is not null) conversations.Mark(editorTurn.ConversationId, editorTurn.TurnId, "Applying");
-                            workspaceMessage = "Applying approved edit…"; SendEditor(new("apply_ready", frame.Id)); PublishWorkspace(); break;
+                            workspaceMessage = "Updating working file…"; SendEditor(new("apply_ready", frame.Id)); PublishWorkspace(); break;
                         case "apply_failed":
                             if (editorSession.State != "applying") throw new InvalidOperationException("No edit is being applied.");
                             if (editorTurn is not null) conversations.Mark(editorTurn.ConversationId, editorTurn.TurnId, "Failed");
-                            editorSession.Cancel(); editorWindow = null; workspaceMessage = "Edit failed · Document was not changed"; desktop.SetActive(false); PublishWorkspace(); break;
+                            editorSession.Cancel(); CancelEditorHotkey(); editorWindow = null; workspaceMessage = "Edit failed · Document was not changed"; desktop.SetActive(false); PublishWorkspace(); break;
                         case "applied":
                             if (editorSession.State != "applying") throw new InvalidOperationException("No submitted edit is awaiting a receipt.");
                             if (editorTurn is not null) conversations.Mark(editorTurn.ConversationId, editorTurn.TurnId, "Applied");
-                            workspaceMessage = "Applied · Undo is available";
+                            var noChange = editorSession.ProposalKind == "noop";
+                            workspaceMessage = noChange ? "No initial selection · Nothing changed" : "Inserted in working file · Review in editor";
                     var editorName = EditorDisplayName;
-                            editorSession.Complete(frame.Id); editorWindow = null; desktop.SetActive(false);
-                            desktop.PlayInsertionSuccess(); desktop.SetStatus($"Inserted · Applied in {editorName}", true); PublishWorkspace(); break;
+                            editorSession.Complete(frame.Id); CancelEditorHotkey(); editorWindow = null; desktop.SetActive(false);
+                            SendEditor(new("committed", frame.Id));
+                            if (!noChange) desktop.PlayInsertionSuccess(); desktop.SetStatus(noChange ? "No initial selection · Nothing changed" : $"Inserted · Review in {editorName}", true); PublishWorkspace(); break;
                         default: throw new InvalidDataException("Unknown editor command.");
                     }
                 }
                 completion.TrySetResult(new("ack", frame.Id));
             }
-            catch (Exception ex) { if (frame.Type is "start" or "clarify" && editorSession.Busy) Cancel(); completion.TrySetException(ex); }
+            catch (Exception ex)
+            {
+                if (frame.Type == "workspace_voice" && frame.State == "hotkey" && editorHotkey.Id == frame.Id && frame.ClientId == editorHotkeyClient && !previousWorkspaceAsking)
+                { if (workspaceAsking) CancelWorkspaceRequest(); else CancelEditorHotkey(); desktop.ResetRecordingGesture(); }
+                if (frame.Id == editorHotkey.Id && (editorHotkey.Pending || previousEditorRequest is null && !workspaceAsking)) CancelEditorHotkey();
+                if (editorSession.Busy && editorSession.Id == frame.Id && (frame.Type == "clarify" || frame.Type == "start" && previousEditorRequest is null)) Cancel();
+                completion.TrySetException(ex);
+            }
         });
         return completion.Task.WaitAsync(ct);
     }
@@ -163,22 +193,65 @@ internal sealed partial class SharpVoiceApp
     private async Task GenerateEditorAsync(string transcript, int id, CancellationToken ct)
     {
         var requestId = editorSession.Id; var mode = editorSession.Mode;
+        var shortcut = editorSession.Instruction.Length == 0 && !editorCustomExpanded ? EditorShortcuts.Match(transcript) : null;
         var instruction = editorSession.Instruction.Length == 0 ? transcript : editorSession.Instruction + "\nUser clarification: " + transcript;
         if (instruction.Length > 16000) throw new InvalidOperationException("Code request is too long. Start again with a shorter instruction.");
         var history = conversations.Get(editorThread) ?? throw new OperationCanceledException();
         var turn = conversations.Begin(history.Id, transcript); editorTurn = turn;
-        var validated = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously); editorValidated = validated;
+        var validated = new TaskCompletionSource<EditorFrame>(TaskCreationOptions.RunContinuationsAsynchronously); editorValidated = validated;
         editorValidationNonce = Guid.NewGuid().ToString("N");
-        await editorBridge!.SendAsync(new("validate", requestId, Message: editorValidationNonce));
-        await validated.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        await editorBridge!.SendAsync(new("validate", requestId, Instruction: editorSession.Instruction.Length == 0 ? transcript : shortcut, State: editorSession.Instruction.Length == 0 ? editorCustomExpanded ? "expanded" : "initial" : "clarification", Message: editorValidationNonce));
+        var validationReply = await validated.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
         ct.ThrowIfCancellationRequested();
         var context = editorSession.Context!;
+        if (validationReply.State == "local")
+        {
+            conversations.Complete(turn, "Native IDE command", "Answered", "Native editor");
+            desktop.Post(() =>
+            {
+                if (generation != id || !editorSession.Busy || editorSession.Id != requestId || ct.IsCancellationRequested) return;
+                editorSession.Cancel(); CancelEditorHotkey(); editorWindow = null; phase = Phase.Idle; desktop.SetRecording(false); desktop.SetActive(false);
+                SendEditor(new("local_command", requestId, Instruction: transcript)); PublishWorkspace();
+            });
+            return;
+        }
+        if (validationReply.Instruction is not null)
+        {
+            if (string.IsNullOrWhiteSpace(validationReply.Instruction) || validationReply.Instruction.Length > 4000) throw new ArgumentException("Invalid custom shortcut expansion.");
+            instruction = validationReply.Instruction;
+        }
+        if (shortcut == "document") instruction = EditorShortcuts.DocumentInstruction;
+        if (shortcut == "explain")
+        {
+            try
+            {
+                using var answerDeadline = CancellationTokenSource.CreateLinkedTokenSource(ct); answerDeadline.CancelAfter(TimeSpan.FromMinutes(2));
+                var response = await AnswerConversation.From(history, context.SourceText).ReplyAsync(refiner, EditorShortcuts.ExplainInstruction + " Language: " + context.Language, "code", recordingConfig, answerDeadline.Token);
+                ct.ThrowIfCancellationRequested();
+                if (!conversations.Complete(turn, response, "Answered", recordingModel)) throw new OperationCanceledException();
+                desktop.Post(() =>
+                {
+                    if (generation != id || !editorSession.Busy || editorSession.Id != requestId || ct.IsCancellationRequested) return;
+                    editorSession.Cancel(); CancelEditorHotkey(); editorWindow = null; phase = Phase.Idle;
+                    desktop.SetRecording(false); desktop.SetActive(false); workspaceMessage = "Explanation ready · Source unchanged";
+                    SendEditor(new("answered", requestId)); PublishWorkspace();
+                });
+            }
+            catch { conversations.Cancel(turn); throw; }
+            return;
+        }
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromMinutes(2));
         desktop.Post(() => { if (generation == id && editorSession.Busy) { workspaceMessage = "Thinking…"; PublishWorkspace(); } });
         EditorResult result;
-        try { result = await new EditorRefiner(refiner).GenerateAsync(new(mode, instruction, context, history), recordingConfig, deadline.Token); ct.ThrowIfCancellationRequested(); }
+        try
+        {
+            var native = EditorShortcuts.Action(shortcut, context);
+            if (native is not null) { result = native; recordingModel = "Native editor"; }
+            else result = await new EditorRefiner(refiner).GenerateAsync(new(mode, instruction, context, history), recordingConfig, deadline.Token);
+            ct.ThrowIfCancellationRequested();
+        }
         catch { conversations.Cancel(turn); throw; }
-        if (!conversations.Complete(turn, result.Kind == "clarify" || result.Kind == "unsupported" ? result.Question : result.Text, result.Kind == "clarify" ? "Needs Clarification" : result.Kind == "unsupported" ? "Unsupported" : "Proposed", recordingModel)) throw new OperationCanceledException();
+        if (!conversations.Complete(turn, result.Kind == "clarify" || result.Kind == "unsupported" ? result.Question : result.Kind is "comment" or "uncomment" or "format" ? $"{result.Kind} initial target" : result.Kind == "noop" ? "No initial selection; nothing changed." : result.Text, result.Kind == "clarify" ? "Needs Clarification" : result.Kind == "unsupported" ? "Unsupported" : "Proposed", recordingModel, result.Choices)) throw new OperationCanceledException();
         ct.ThrowIfCancellationRequested();
         desktop.Post(() =>
         {
@@ -186,9 +259,11 @@ internal sealed partial class SharpVoiceApp
             if (!EditorWindowFocused()) { Cancel(); return; }
             editorSession.Instruction = instruction + (result.Kind == "clarify" ? "\nClarification asked: " + result.Question : "");
             editorSession.Propose(requestId, result); phase = Phase.Idle; desktop.SetRecording(false);
+            if (result.Kind == "clarify") desktop.PlayFollowUpQuestion();
             desktop.SetStatus(result.Kind == "clarify" ? $"Needs clarification in {EditorDisplayName}" : result.Kind == "unsupported" ? $"{EditorDisplayName} request unsupported" : $"Review in {EditorDisplayName}", true);
             workspaceMessage = result.Kind == "clarify" ? "Needs Clarification" : result.Kind == "unsupported" ? "Request Unsupported" : "Review the proposed change";
-            SendEditor(new("result", requestId, Result: result, Model: recordingModel));
+            if (result.Kind is "comment" or "uncomment" or "noop" or "format") SendEditor(new("action", requestId, Mode: result.Kind, Model: recordingModel));
+            else SendEditor(new("result", requestId, Result: result, Model: recordingModel));
             PublishWorkspace();
             if (result.Kind == "unsupported") { editorSession.Cancel(); editorWindow = null; desktop.SetActive(false); }
         });
@@ -206,12 +281,13 @@ internal sealed partial class SharpVoiceApp
         if (editorBridge is null) return;
         var task = editorBridge.SendAsync(frame);
         preloads.RemoveAll(t => t.IsCompleted); preloads.Add(task);
-        _ = task.ContinueWith(_ => desktop.Post(() => { if (editorSession.Busy) Cancel(); }), TaskContinuationOptions.OnlyOnFaulted);
+        _ = task.ContinueWith(_ => desktop.Post(() => { if (editorSession.Busy && editorSession.Id == frame.Id) Cancel(); }), TaskContinuationOptions.OnlyOnFaulted);
     }
     private void CancelEditor()
     {
+        CancelEditorHotkey();
         if (!editorSession.Busy) return;
-        if (editorTurn is not null) { conversations.Cancel(editorTurn); if (editorSession.State is "proposal" or "applying") conversations.Mark(editorTurn.ConversationId, editorTurn.TurnId, editorSession.State == "applying" ? "Outcome Unknown" : "Canceled"); }
+        if (editorTurn is not null) { conversations.Cancel(editorTurn); if (editorSession.State is "proposal" or "applying" or "clarify") conversations.Mark(editorTurn.ConversationId, editorTurn.TurnId, editorSession.State == "applying" ? "Outcome Unknown" : "Canceled"); }
         var committing = editorSession.State == "applying";
         var id = editorSession.Id; var editorName = EditorDisplayName; editorSession.Cancel(); editorWindow = null; editorValidated?.TrySetCanceled(); editorValidated = null; editorValidationNonce = "";
         workspaceMessage = committing ? "Edit Outcome Unknown · Check the document before retrying" : "Canceled · Conversation retained";

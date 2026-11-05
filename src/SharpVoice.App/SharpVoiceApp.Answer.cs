@@ -12,7 +12,6 @@ internal sealed partial class SharpVoiceApp
     private AnswerContext? answer;
     private AnswerContext? answerReply;
     private CancellationTokenSource? speechCancellation;
-    private CancellationTokenSource? answerInsertion;
     private Task speechWork = Task.CompletedTask;
     private long speechGeneration;
     private readonly VoiceStartGate voiceStart = new();
@@ -21,12 +20,18 @@ internal sealed partial class SharpVoiceApp
 
     private void InitializeAnswers()
     {
+        desktop.AnswerSpeechChanged = enabled =>
+        {
+            var next = config with { AnswerSpeechEnabled = enabled };
+            ConfigManager.Save(next); config = next;
+            if (!enabled) StopAnswerSpeech();
+            else if (answer is not null && phase == Phase.Idle && !pendingVoiceStart && !editorSession.Busy) StartAnswerSpeech(answer);
+        };
         desktop.AnswerStopRequested = () => { if (answerReply is not null) Cancel(); else { StopAnswerSpeech(); desktop.SetAnswerStatus("Stopped · Replay to Read Again"); } };
         desktop.AnswerReplayRequested = () => { if (answer is not null && phase == Phase.Idle && !pendingVoiceStart && !editorSession.Busy) StartAnswerSpeech(answer); };
-        desktop.AnswerInsertRequested = InsertAnswer;
         desktop.AnswerVoiceRequested = ToggleAnswerReply;
         desktop.AnswerReplyRequested = StartTypedAnswerReply;
-        desktop.AnswerClosed = () => { if (answerReply is not null) Cancel(); StopAnswerSpeech(); answerInsertion?.Cancel(); answer?.Ownership?.Dispose(); answer = null; };
+        desktop.AnswerClosed = () => { if (answerReply is not null) Cancel(); StopAnswerSpeech(); answer?.Ownership?.Dispose(); answer = null; };
     }
     private void PresentAnswer(string text, string model, WindowTarget destination, AppConfig settings, DeferredDisposable<SelectionSnapshot> ownership, Guid historyId, string request, string? source, string conversationId)
     {
@@ -34,8 +39,8 @@ internal sealed partial class SharpVoiceApp
         answer = new(text, destination, settings, ownership, historyId, source, conversationId);
         desktop.SetPreview(text, retain: true); UpdateHistory(historyId, text, "Answered · Not Inserted");
         desktop.SetStatus("Answered · " + ReadyText()); desktop.ShowAnswer(text, model);
-        desktop.SetAnswerConversation(conversations.Get(conversationId)!); desktop.SetAnswerInsertionAvailable(true);
-        StartAnswerSpeech(answer);
+        desktop.SetAnswerConversation(conversations.Get(conversationId)!);
+        if (config.AnswerSpeechEnabled) StartAnswerSpeech(answer);
     }
     private void StopAnswerSpeech()
     {
@@ -143,33 +148,6 @@ internal sealed partial class SharpVoiceApp
             RestoreSpeechInput(); BeginEditorRecording();
         });
     }
-    private void InsertAnswer()
-    {
-        if (answer is not { Target: not null, Ownership: not null } context || phase != Phase.Idle || editorSession.Busy || pendingVoiceStart) return;
-        phase = Phase.Processing; StopAnswerSpeech(); desktop.SetAnswerReplyState(true); desktop.SetAnswerStatus("Preparing Insertion…");
-        var owner = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); answerInsertion = owner;
-        work = InsertAnswerAsync(context, speechWork, owner);
-    }
-    private async Task InsertAnswerAsync(AnswerContext context, Task stopping, CancellationTokenSource deadline)
-    {
-        try
-        {
-            await stopping.ConfigureAwait(false);
-            var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            desktop.Post(() =>
-            {
-                try { if (!ReferenceEquals(answer, context)) throw new OperationCanceledException(); RestoreAnswerTarget(context.Target!); ready.TrySetResult(); }
-                catch (Exception ex) { ready.TrySetException(ex); }
-            });
-            await ready.Task.WaitAsync(TimeSpan.FromSeconds(10), deadline.Token).ConfigureAwait(false);
-            var selection = await context.Ownership!.Value.ConfigureAwait(false);
-            await TextInjector.InsertAsync(context.Text, context.Target!, context.Settings.Injection, context.Settings.PasteDelayMs, deadline.Token, selection).ConfigureAwait(false);
-            desktop.Post(() => { if (!ReferenceEquals(answer, context)) return; desktop.PlayInsertionSuccess(); UpdateHistory(context.HistoryId, context.Text, "Answer Inserted"); desktop.HideAnswer(); desktop.SetStatus("Inserted · " + ReadyText()); });
-        }
-        catch (Exception ex) { desktop.Post(() => { if (ReferenceEquals(answer, context)) desktop.SetAnswerStatus(ex is OperationCanceledException ? "Insertion Canceled · Use Copy" : ex.Message); }); }
-        finally { desktop.Post(() => { if (ReferenceEquals(answerInsertion, deadline)) answerInsertion = null; deadline.Dispose(); if (ReferenceEquals(answer, context)) desktop.SetAnswerReplyState(false); if (phase is Phase.Processing or Phase.Cancelling) phase = Phase.Idle; PublishWorkspace(); }); }
-    }
-
     private bool CanReplyToAnswer() => answer is not null && phase == Phase.Idle && !pendingVoiceStart && !editorSession.Busy && !authBusy;
     private void StartTypedAnswerReply(string request)
     {
@@ -261,7 +239,7 @@ internal sealed partial class SharpVoiceApp
         var view = conversations.Get(context.ConversationId) ?? throw new OperationCanceledException();
         var lease = conversations.Begin(view.Id, request);
         string text;
-        try { text = await AnswerConversation.From(view, context.SelectedContext).ReplyAsync(refiner, request, context.Target?.ProcessName ?? "", context.Settings, timeout.Token); }
+        try { text = await AnswerConversation.From(view, context.SelectedContext).ReplyAsync(refiner, request, context.Target?.ProcessName ?? "", context.Settings with { AnswerVerbosity = config.AnswerVerbosity }, timeout.Token); }
         catch { conversations.Cancel(lease); throw; }
         if (ct.IsCancellationRequested) { conversations.Cancel(lease); ct.ThrowIfCancellationRequested(); }
         if (!CompleteAskTurn(lease, text, "Answered")) throw new OperationCanceledException();
@@ -271,9 +249,9 @@ internal sealed partial class SharpVoiceApp
             if (generation != id || ct.IsCancellationRequested || !ReferenceEquals(answer, context)) return;
             var next = context with { Text = text };
             answer = next;
-            desktop.ShowAnswer(text, model); desktop.SetAnswerConversation(conversations.Get(context.ConversationId)!); desktop.SetAnswerInsertionAvailable(context.Target is not null); desktop.SetPreview(text, retain: true);
+            desktop.ShowAnswer(text, model); desktop.SetAnswerConversation(conversations.Get(context.ConversationId)!); desktop.SetPreview(text, retain: true);
             // A follow-up is retained in this popup, not written over the original dictation history entry.
-            StartAnswerSpeech(next);
+            if (config.AnswerSpeechEnabled) StartAnswerSpeech(next);
         });
     }
     private void ReportAnswerReplyFailure(AnswerContext context, int id, Exception ex) => desktop.Post(() =>

@@ -4,6 +4,56 @@ using SharpVoice.Refiner;
 internal static class EditorChecks
 {
     internal static EditorContext Context() => new("file:///C:/fixture.cs", 1, "csharp", "fixture.cs", "class C { }", 0, 0, "", "", "    ", "\r\n");
+    public static Task HotkeyHandoff()
+    {
+        var gate = new EditorHotkeyGate(); var now = DateTimeOffset.UtcNow;
+        var first = gate.Begin(now);
+        if (!gate.Pending || !gate.Active || gate.Accept("wrong", now)) throw new Exception("Uncorrelated editor start accepted.");
+        gate.Cancel();
+        if (gate.Accept(first, now)) throw new Exception("Released/cancelled handoff started late.");
+        var second = gate.Begin(now);
+        if (first == second || gate.Accept(first, now) || !gate.Accept(second, now.AddSeconds(1)) || gate.Pending || !gate.Active)
+            throw new Exception("Editor handoff ownership was not retained after acceptance.");
+        if (gate.Accept(second, now.AddSeconds(2))) throw new Exception("Duplicate handoff accepted.");
+        gate.Cancel(); var expired = gate.Begin(now);
+        if (!gate.Expired(now.AddSeconds(6)) || gate.Accept(expired, now.AddSeconds(6))) throw new Exception("Expired editor handoff accepted.");
+        gate.Cancel(); if (gate.Active) throw new Exception("Editor hotkey ownership was not cleared.");
+        var ask = gate.Begin(now, VoiceMode.AskAi);
+        if (gate.Mode != VoiceMode.AskAi || !gate.Accept(ask, now.AddSeconds(1)) || gate.Pending) throw new Exception("Ask handoff lost its mode or correlation.");
+        gate.Cancel(); gate.Begin(now); if (gate.Mode != VoiceMode.Dictation) throw new Exception("Next Dictation reused Ask mode.");
+        gate.Cancel();
+        return Task.CompletedTask;
+    }
+    public static Task Shortcuts()
+    {
+        foreach (var (text, expected) in new (string, string?)[] { ("Document", "document"), (" COMMENT! ", "comment"), ("Uncomment.", "uncomment"), ("Explain?", "explain"), ("Format.", "format"), ("document this function", null), ("Do not comment", null) })
+            if (EditorShortcuts.Match(text) != expected) throw new Exception("Incorrect exact shortcut match: " + text);
+        var selected = Context() with { Start = 0, End = 11, SourceText = "class C { }", TargetKind = "selection" };
+        if (EditorShortcuts.Action("comment", selected)?.Kind != "comment" || EditorShortcuts.Action("uncomment", selected)?.Kind != "uncomment"
+            || EditorShortcuts.Action("comment", Context())?.Kind != "noop" || EditorShortcuts.Action("document", selected) is not null || EditorShortcuts.Action("explain", selected) is not null || EditorShortcuts.Action("format", Context())?.Kind != "format")
+            throw new Exception("Native shortcut routing or no-selection guard failed.");
+        if (!EditorShortcuts.DocumentInstruction.Contains("documentation") || !EditorShortcuts.DocumentInstruction.Contains("behavior")) throw new Exception("Documentation shortcut lacks a fixed documentation-only instruction.");
+        foreach (var kind in new[] { "comment", "uncomment", "noop", "format", "answered" })
+        {
+            try { EditorValidation.ParseResult($"{{\"kind\":\"{kind}\",\"text\":\"\",\"question\":\"\"}}", "edit", selected); throw new Exception("Model output was allowed to invoke native actions."); }
+            catch (InvalidDataException) { }
+        }
+        return Task.CompletedTask;
+    }
+    public static Task LanguagePolicy()
+    {
+        var json = Context() with { Language = "json", Name = "test.json", SourceText = "{\"a\":1}", Start = 0, End = 7, TargetKind = "selection" };
+        foreach (var action in new[] { "comment", "document" })
+            if (EditorShortcuts.Action(action, json)?.Kind != "unsupported") throw new Exception("Strict JSON accepted invalid shortcut: " + action);
+        if (EditorShortcuts.Action("uncomment", json)?.Kind != "uncomment" || EditorShortcuts.Action("format", json)?.Kind != "format" || EditorShortcuts.Action("explain", json) is not null)
+            throw new Exception("Strict JSON policy blocked repair, formatting or explanations.");
+        if (EditorShortcuts.Action("comment", json with { Start = 0, End = 0, SourceText = "", TargetKind = "cursor", CursorOffset = 0 })?.Kind != "noop")
+            throw new Exception("No-selection comments must remain no-ops.");
+        if (EditorShortcuts.Action("comment", json with { Language = "jsonc", Name = "settings.json" })?.Kind != "comment") throw new Exception("JSONC comments were blocked.");
+        foreach (var (language, name) in new[] { ("jsonl", "test.jsonl"), ("plaintext", "test.ndjson"), ("csv", "test.csv"), ("tsv", "test.tsv") })
+            if (EditorShortcuts.Action("document", json with { Language = language, Name = name })?.Kind != "unsupported") throw new Exception("Invalid documentation accepted for " + name);
+        return Task.CompletedTask;
+    }
     public static Task Contracts()
     {
         EditorValidation.ValidateContext(Context());
@@ -34,6 +84,17 @@ internal static class EditorChecks
         foreach(var invalid in new[]{automatic with{CursorOffset=12},automatic with{CursorOffset=null},automatic with{TargetKind="selection"},automatic with{TargetKind="other"}})
             try{EditorValidation.ValidateContext(invalid);throw new Exception("Invalid automatic target accepted.");}catch(ArgumentException){}
         if(EditorRefiner.Instructions.Contains("ask the user to select that code and use Edit Code"))throw new Exception("Dictation still refuses context-aware refactoring.");
+        return Task.CompletedTask;
+    }
+    public static Task ProjectContext()
+    {
+        var context = Context() with { RelatedSources = [new("Types.cs", "csharp", "interface I { }")], ProjectGuidance = "Use existing names", GuidanceFiles = ["AGENTS.md"] };
+        EditorValidation.ValidateContext(context);
+        using var json = System.Text.Json.JsonDocument.Parse(EditorRefiner.Input(new("edit", "Update interface", context)));
+        var node = json.RootElement.GetProperty("context");
+        if (node.GetProperty("related_sources")[0].GetProperty("name").GetString() != "Types.cs" || node.GetProperty("project_guidance").GetString() != "Use existing names") throw new Exception("Project context was lost.");
+        foreach (var invalid in new[] { context with { ProjectGuidance = new string('x', 8001) }, context with { RelatedSources = [new("a", "csharp", new string('x', 8001))] }, context with { RelatedSources = Enumerable.Range(0,5).Select(i => new EditorRelatedSource(i.ToString(), "csharp", "x")).ToArray() } })
+            try { EditorValidation.ValidateContext(invalid); throw new Exception("Excessive project context accepted."); } catch (ArgumentException) { }
         return Task.CompletedTask;
     }
     public static async Task Provider()

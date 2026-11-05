@@ -151,6 +151,8 @@ public sealed partial class NativeDesktop : IDisposable
         Win32.InvalidateRect(hudWindow, 0, 0);
     }
 
+    public void PlayFollowUpQuestion() => sounds?.Play(FeedbackCue.FollowUpQuestion);
+
     public void PlayInsertionSuccess()
     {
         sounds?.Play(FeedbackCue.InsertionSuccess);
@@ -158,12 +160,13 @@ public sealed partial class NativeDesktop : IDisposable
         if (!active) ScheduleHudDismissal();
     }
 
+    public void SetRecordingGestureActive(bool active) => hook?.SetRecordingActive(active);
     public void ResetRecordingGesture() => hook?.ResetRecordingGesture();
     public void SetExternalRecording(bool active) => hook?.SetExternalRecording(active);
 
     public void SetRecording(bool value)
     {
-        if (!value) ResetRecordingGesture();
+        SetRecordingGestureActive(value);
         var cue = value ? feedback.BeginRecording() : feedback.EndRecording();
         sounds?.Play(cue);
         ApplyMicrophoneIcon();
@@ -197,6 +200,7 @@ public sealed partial class NativeDesktop : IDisposable
         if (value && !active) PositionPillForRecording(targetWindow);
         if (value) { hudPasteCompleted = false; CancelHistoryRetry(); CancelConnectionTest(); HideHelp(); StopInputPreview(); }
         active = value;
+        RefreshInputMonitoring();
         RefreshHistoryRetryControls();
         RefreshConnectionTestControls();
         Win32.ShowWindow(cancelButton, active ? 5 : 0);
@@ -214,7 +218,7 @@ public sealed partial class NativeDesktop : IDisposable
         }
     }
 
-    private void ShowSettings() { ApplyTheme(); RequestModelsRefresh(); Win32.ShowWindow(settingsWindow, 5); Win32.SetTimer(settingsWindow, 3, 100, 0); Win32.SetForegroundWindow(settingsWindow); }
+    private void ShowSettings() { ApplyTheme(); RequestModelsRefresh(); Win32.ShowWindow(settingsWindow, 5); RefreshInputMonitoring(); Win32.SetTimer(settingsWindow, 3, 100, 0); Win32.SetForegroundWindow(settingsWindow); }
     private void CopyLast()
     {
         if (lastText.Length == 0) throw new InvalidOperationException("No completed transcript to copy yet.");
@@ -261,7 +265,7 @@ public sealed partial class NativeDesktop : IDisposable
             switch (command)
             {
                 case 1: ShowSettings(); break;
-                case 2: paused = !paused; if (paused) StopInputPreview(); PauseChanged?.Invoke(paused); break;
+                case 2: paused = !paused; if (paused) StopInputPreview(); PauseChanged?.Invoke(paused); RefreshInputMonitoring(); break;
                 case 6: CopyLast(); break;
                 case 7: Win32.PostQuitMessage(0); break;
             }
@@ -423,6 +427,7 @@ public sealed partial class NativeDesktop : IDisposable
     public void Dispose()
     {
         disposed = true;
+        StopInputPreview();
         CloseSetupCore();
         HideAnswer(); HideConnected(); CancelConnectedDiscovery();
         if (connectedWindow != 0) Win32.DestroyWindow(connectedWindow);

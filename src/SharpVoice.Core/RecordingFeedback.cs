@@ -1,7 +1,7 @@
 namespace SharpVoice.Core;
 
 public enum MicrophoneState { Neutral, Recording, Error }
-public enum FeedbackCue { None, RecordingStart, RecordingStop, Warning, InsertionSuccess }
+public enum FeedbackCue { None, RecordingStart, RecordingStop, Warning, InsertionSuccess, FollowUpQuestion }
 
 /// <summary>Recording state is independent of the HUD's transcription/refinement activity.</summary>
 public sealed class RecordingFeedback

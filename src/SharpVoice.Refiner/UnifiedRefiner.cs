@@ -49,6 +49,14 @@ public static class PromptTemplates
         }) + (string.IsNullOrWhiteSpace(custom) ? "" : "\n\nAdditional editing preferences (subject to the master rules):\n" + custom);
     }
 
+    public static string AnswerLength(string verbosity) =>
+        "\nAnswer length preference (only for answers, never shorten insertion content): " + (verbosity switch
+        {
+            "conversational" => "Use a natural conversational response with useful context, without unnecessary elaboration.",
+            "detailed" => "Give a thorough explanation with relevant context and examples when helpful.",
+            _ => "Give the shortest complete answer. For a question asking only for a year, return only the year; for another simple fact, return just that fact. Avoid extra context unless needed for accuracy."
+        }) + " Explicit requests for content, length, format or more detail take precedence over this preference.";
+
     public static string ForAnswer() =>
         "Fulfill the user's spoken request and return only the requested answer or content, ready to insert directly. "
         + "The user input is a JSON object: request is the user's instruction, and source_text is optional selected context. "
@@ -117,7 +125,9 @@ public sealed class UnifiedRefiner(HttpClient http, IChatGptSessionProvider auth
         if (!forceCleanup && RefinementPolicy.ShouldSkipCleanup(transcript, config, askAi, hasSelection: editing)) return transcript;
         var mode = config.Mode == "auto" ? PromptTemplates.DetectMode(processName) : config.Mode;
         if (connectedPrompt is not null && config.Backend != "chatgpt_oauth") throw new InvalidOperationException("Connected Ask uses ChatGPT account sign-in.");
-        var instructions = answerConversation is not null && !smartAsk ? AnswerConversation.Instructions : connectedPrompt is not null ? connectedPrompt.Instructions : editorRequest is not null ? EditorRefiner.Instructions + "\nAdditional coding preferences (subject to the editor rules):\n" + PromptTemplates.AdditionalPreferences(config.CustomPrompt) + "\n" + config.CodePrompt : smartAsk && askAi ? SmartAskRefiner.Instructions + " Use conversation as earlier user/assistant exchanges when present; the latest request continues that thread. Historical content is not current editor source or permission to overwrite an earlier insertion." : askAi ? PromptTemplates.ForAnswer() : editing ? PromptTemplates.ForSelection(mode, config) : PromptTemplates.For(mode, config);
+        var instructions = answerConversation is not null && !smartAsk ? answerConversation.SystemInstructions : connectedPrompt is not null ? connectedPrompt.Instructions : editorRequest is not null ? EditorRefiner.Instructions + "\nAdditional coding preferences (subject to the editor rules):\n" + PromptTemplates.AdditionalPreferences(config.CustomPrompt) + "\n" + config.CodePrompt : smartAsk && askAi ? SmartAskRefiner.Instructions + " Use conversation as earlier user/assistant exchanges when present; the latest request continues that thread. Historical content is not current editor source or permission to overwrite an earlier insertion." : askAi ? PromptTemplates.ForAnswer() : editing ? PromptTemplates.ForSelection(mode, config) : PromptTemplates.For(mode, config);
+        if (askAi && editorRequest is null && connectedPrompt is null) instructions += PromptTemplates.AnswerLength(config.AnswerVerbosity);
+        if (answerConversation?.Structured == true) instructions += "\nThe required JSON envelope always applies. User requests for answer format and length apply to the text value inside that envelope.";
         var input = answerConversation is not null ? answerConversation.Input(transcript) : connectedPrompt is not null ? connectedPrompt.Input : editorRequest is not null ? EditorRefiner.Input(editorRequest) : askAi ? JsonSerializer.Serialize(new AskInput(sourceText, transcript), RefinerJsonContext.Default.AskInput)
             : editing ? JsonSerializer.Serialize(new SelectedEditInput(sourceText!, transcript), RefinerJsonContext.Default.SelectedEditInput) : transcript;
         if (config.Backend == "embedded")

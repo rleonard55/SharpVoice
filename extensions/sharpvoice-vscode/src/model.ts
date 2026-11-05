@@ -1,8 +1,11 @@
 export interface Snapshot { uri:string; version:number; language:string; name:string; text:string; start:number; end:number; diagnostics:string; indent:string; eol:string }
-export interface Context { uri:string; version:number; language:string; name:string; context_text:string; start:number; end:number; source_text:string; diagnostics:string; indent:string; eol:string; target_kind?:string; cursor_offset?:number }
-export interface Result {kind:'insert'|'replace'|'clarify'|'unsupported';text:string;question:string}
+export interface RelatedSource {name:string;language:string;text:string}
+export interface ReviewItem {id:string;uri:string;file:string;line:number;conflicted:boolean;preview:string}
+export interface Context {related_sources?:RelatedSource[];project_guidance?:string;guidance_files?:string[]; uri:string; version:number; language:string; name:string; context_text:string; start:number; end:number; source_text:string; diagnostics:string; indent:string; eol:string; target_kind?:string; cursor_offset?:number }
+export interface Result {kind:'insert'|'replace'|'clarify'|'unsupported';text:string;question:string;choices?:string[]}
 import type {Conversation,ConversationInfo} from './panelModel';
-export interface Frame {type:string;id?:string;version?:number;mode?:string;context?:Context;instruction?:string;result?:Result;model?:string;message?:string;token?:string;host_id?:string;client_id?:string;workspace?:string;conversation_id?:string;turn_id?:string;sequence?:number;conversation?:Conversation;conversations?:ConversationInfo[];state?:string;include_file?:boolean}
+export interface FollowUp {id:string;question:string;choices:string[]}
+export interface Frame {review_items?:ReviewItem[];recovery_available?:number;project_files?:string[];verification?:string;follow_up?:FollowUp;pending_changes?:number;review_conflicts?:number;review_file?:string;type:string;id?:string;version?:number;mode?:string;context?:Context;instruction?:string;result?:Result;model?:string;message?:string;token?:string;host_id?:string;client_id?:string;workspace?:string;conversation_id?:string;turn_id?:string;sequence?:number;conversation?:Conversation;conversations?:ConversationInfo[];state?:string;include_file?:boolean}
 export function captureContext(s:Snapshot,scope:string):Context {
  if(!/^(file|untitled):/.test(s.uri)||s.version<1||!Number.isInteger(s.start)||!Number.isInteger(s.end)||s.start<0||s.end<s.start||s.end>s.text.length) throw new Error('Select a single region in a local editable file.');
  const source=s.text.slice(s.start,s.end); if(source.length>32000)throw new Error('Select a smaller target (32,000 characters maximum).');
@@ -39,7 +42,8 @@ export function captureTarget(s:Snapshot,scope:string,mode:string):{snapshot:Sna
 export function validateResult(raw:unknown,mode:string,start:number,end:number):Result {
  if(!raw||typeof raw!=='object')throw new Error('Invalid code response.');
  const r=raw as Result;
- if(Object.keys(r).some(k=>!['kind','text','question'].includes(k))||!['insert','replace','clarify','unsupported'].includes(r.kind)||typeof r.text!=='string'||r.text.length>200000||typeof r.question!=='string'||r.question.length>2000)throw new Error('Malformed code response.');
+ if(Object.keys(r).some(k=>!['kind','text','question','choices'].includes(k))||!['insert','replace','clarify','unsupported'].includes(r.kind)||typeof r.text!=='string'||r.text.length>200000||typeof r.question!=='string'||r.question.length>2000)throw new Error('Malformed code response.');
+ if(r.choices!==undefined&&(!Array.isArray(r.choices)||r.choices.length>4||r.choices.some(c=>typeof c!=='string'||!c.trim()||c.length>200)||new Set(r.choices.map(c=>c.trim().toLowerCase())).size!==r.choices.length||r.kind!=='clarify'&&r.choices.length>0))throw new Error('Invalid clarification choices.');
  if(r.kind==='clarify'||r.kind==='unsupported'){if(r.text||!r.question.trim())throw new Error('Missing clarification.');}
  else if(r.question||(r.kind==='insert'&&(mode!=='dictate'||start!==end||!r.text.trim())))throw new Error('Invalid insertion scope.');
  return r;
@@ -52,8 +56,23 @@ export class FrameReader {
   for(;;){const end=this.pending.indexOf(10);if(end<0){if(this.pending.length>1048576)throw new Error('Editor frame too large.');break;}
    if(end>1048576)throw new Error('Editor frame too large.');
    const decoder=new TextDecoder('utf-8',{fatal:true});const frame=JSON.parse(decoder.decode(this.pending.subarray(0,end)));
-   if(!frame||typeof frame.type!=='string'||frame.version!==undefined&&frame.version!==3)throw new Error('Incompatible editor frame.');
+   if(!frame||typeof frame.type!=='string'||frame.version!==undefined&&frame.version!==9)throw new Error('Incompatible editor frame.');
    frames.push(frame);this.pending=this.pending.subarray(end+1);
   }return frames;
  }
+}
+
+export type EditorShortcut='document'|'comment'|'uncomment'|'explain'|'format';
+export function editorShortcut(text:string):EditorShortcut|undefined{
+ const command=text.trim().replace(/[.!?]+$/,'').trimEnd().toLowerCase();
+ return command==='document'||command==='comment'||command==='uncomment'||command==='explain'||command==='format'?command:undefined;
+}
+/** The snapshot here is the selection at request start, never a later selection. */
+export function shortcutTarget(initial:Snapshot,shortcut:EditorShortcut,scope:string):{snapshot:Snapshot;context:Context}|undefined{
+ if(initial.start===initial.end){
+  if(shortcut==='comment'||shortcut==='uncomment')return undefined;
+  if(shortcut==='format')return captureTarget(initial,'nearby','dictate');
+  return captureTarget({...initial,start:0,end:0},'document','dictate');
+ }
+ return captureTarget(initial,shortcut==='comment'||shortcut==='uncomment'||shortcut==='format'?'selection':scope,'dictate');
 }

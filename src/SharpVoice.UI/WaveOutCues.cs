@@ -36,7 +36,7 @@ internal sealed unsafe partial class WaveOutCues : IDisposable
         {
             var format = new WaveFormat { Tag = 1, Channels = 1, SamplesPerSecond = 44100, BytesPerSecond = 88200, BlockAlign = 2, BitsPerSample = 16 };
             Check(waveOutOpen(out device, uint.MaxValue, in format, (nuint)completed.SafeWaitHandle.DangerousGetHandle(), 0, 0x50000)); // CALLBACK_EVENT
-            foreach (var (cue, name) in new[] { (FeedbackCue.RecordingStart, "recording-start"), (FeedbackCue.RecordingStop, "recording-stop"), (FeedbackCue.Warning, "warning"), (FeedbackCue.InsertionSuccess, "insertion-success"), (FeedbackCue.None, "recording-start") })
+            foreach (var (cue, name) in new[] { (FeedbackCue.RecordingStart, "recording-start"), (FeedbackCue.RecordingStop, "recording-stop"), (FeedbackCue.Warning, "warning"), (FeedbackCue.InsertionSuccess, "insertion-success"), (FeedbackCue.FollowUpQuestion, "follow-up-question"), (FeedbackCue.None, "recording-start") })
             {
                 var wav = FeedbackAssets.Read(name + ".wav");
                 // These generated embedded assets have a canonical 44-byte PCM WAV header.

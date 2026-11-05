@@ -1,0 +1,24 @@
+const fs=require('node:fs'),path=require('node:path'),{createRequire}=require('node:module');
+module.exports=function fixture(){
+ const listeners={},on=name=>fn=>{(listeners[name]??=[]).push(fn);return {dispose:()=>{listeners[name]=listeners[name].filter(x=>x!==fn);}};},emit=(name,e)=>{for(const fn of listeners[name]??[])fn(e);};
+ class Position{constructor(line,character){this.line=line;this.character=character;}}
+ class Range{constructor(start,end){this.start=start;this.end=end;}get isEmpty(){return this.start.line===this.end.line&&this.start.character===this.end.character;}intersection(){return this;}}
+ class Uri{constructor(value){this.value=value;this.scheme=value.split(':')[0];this.fsPath=value.slice(value.indexOf(':')+1);this.authority='';}toString(){return this.value;}static parse(v){return new Uri(v);}}
+ const frames=[],views=[],warnings=[],commands=[];let controller,lost;let delayCommit,throwReceipt=false;
+ const vscode={EventEmitter:class{listeners=[];event=fn=>{this.listeners.push(fn);return {dispose(){}};};fire(value){for(const fn of this.listeners)fn(value);}dispose(){}},Uri,Range,Selection:Range,Position,ThemeColor:class{constructor(id){this.id=id;}},DecorationRangeBehavior:{ClosedClosed:1},StatusBarAlignment:{Right:1},EndOfLine:{CRLF:2},TabInputTextDiff:class{},env:{},languages:{getDiagnostics:()=>[]},commands:{executeCommand:async(...args)=>{commands.push(args);if(vscode.testCommand)return vscode.testCommand(...args);}},
+ workspace:{isTrusted:true,textDocuments:[],onDidChangeTextDocument:on('change'),onDidCloseTextDocument:on('close'),registerTextDocumentContentProvider:()=>({dispose(){}}),fs:{isWritableFileSystem:()=>true},getConfiguration:()=>({get:()=> 'nearby'})},
+ window:{state:{focused:true},visibleTextEditors:[],createStatusBarItem:()=>({show(){},hide(){},dispose(){}}),createTextEditorDecorationType:()=>({dispose(){}}),onDidChangeWindowState:on('focus'),onDidChangeVisibleTextEditors:on('visible'),onDidChangeActiveTextEditor:on('active'),tabGroups:{all:[],onDidChangeTabs:on('tabs'),close:async()=>{}},showWarningMessage:async text=>warnings.push(text),showErrorMessage:async text=>warnings.push(text),showInformationMessage:async()=>{},showTextDocument:async doc=>{const editor=doc.editor;vscode.window.activeTextEditor=editor;return editor;}}};
+ function document(text,name='test.cs'){
+  const doc={text,version:1,uri:Uri.parse('untitled:'+name),fileName:name,languageId:'csharp',eol:1,isClosed:false,
+   offsetAt:p=>doc.text.split('\n').slice(0,p.line).reduce((n,l)=>n+l.length+1,0)+p.character,
+   positionAt:o=>{const parts=doc.text.slice(0,o).split('\n');return new Position(parts.length-1,parts.at(-1).length);},
+   getText:r=>r?doc.text.slice(doc.offsetAt(r.start),doc.offsetAt(r.end)):doc.text};
+  const editor={document:doc,selection:new Range(new Position(0,0),new Position(0,0)),selections:[1],options:{},revealRange(){},setDecorations(){},edit:async builder=>{const edits=[];builder({replace:(r,t)=>edits.push({rangeOffset:doc.offsetAt(r.start),rangeLength:doc.offsetAt(r.end)-doc.offsetAt(r.start),text:t.replace(/\r\n|\r|\n/g,doc.eol===2?'\r\n':'\n')})});change(doc,edits);return true;}};doc.editor=editor;vscode.window.visibleTextEditors.push(editor);vscode.workspace.textDocuments.push(doc);return doc;
+ }
+ function change(doc,edits,reason){for(const e of [...edits].sort((a,b)=>b.rangeOffset-a.rangeOffset))doc.text=doc.text.slice(0,e.rangeOffset)+e.text+doc.text.slice(e.rangeOffset+e.rangeLength);doc.version++;emit('change',{document:doc,contentChanges:edits,reason});}
+ const cache=new Map();function load(file){file=path.resolve(__dirname,'../out',file);if(cache.has(file))return cache.get(file).exports;const mod={exports:{}};cache.set(file,mod);const req=createRequire(file);new Function('require','module','exports',fs.readFileSync(file,'utf8'))(id=>id==='vscode'?vscode:id.startsWith('./')?load(path.resolve(path.dirname(file),id+'.js')):req(id),mod,mod.exports);return mod.exports;}
+ const {VoiceEditorController}=load('extension.js');
+ controller=new VoiceEditorController((receive,disconnected)=>{lost=disconnected;return {connect:async()=>{},send:f=>{if(throwReceipt&&f.type==='applied')throw new Error('receipt lost');frames.push(f);if(f.type==='applying')queueMicrotask(()=>controller.receive({type:'apply_ready',id:f.id}));},dispose(){}};},()=>true,async()=>{},async(editor,range,text)=>{if(delayCommit)await delayCommit;return editor.edit(e=>e.replace(range,text));});
+ controller.attachPanel({update:f=>views.push(f),show:async()=>{},move:async()=>{}});
+ return {controller,vscode,document,change,frames,views,warnings,commands,activate:doc=>{vscode.window.activeTextEditor=doc.editor;emit('active',doc.editor);},disconnect:()=>lost(),delay:promise=>{delayCommit=promise;},loseReceipt:()=>{throwReceipt=true;}};
+};
