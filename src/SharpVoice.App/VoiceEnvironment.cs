@@ -15,5 +15,6 @@ internal sealed class VoiceEnvironment
     public string? ModelDirectory { get; init; }
     public string? WakeModelRoot { get; init; }
     public string? EditorDiscoveryPath { get; init; }
+    public Action TrimMemory { get; init; } = () => { MemoryTrimmer.Trim(); };
     public bool EditorIntegration { get; init; } = true;
 }

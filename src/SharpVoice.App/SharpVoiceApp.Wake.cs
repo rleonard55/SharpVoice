@@ -27,7 +27,7 @@ internal sealed partial class SharpVoiceApp
             var stopping = StopWakeAsync(); preloads.Add(stopping);
             SetWakeState(new("canceled", 0, null, "Preparation canceled · Hotkeys still work. Choose Retry to enable wake listening."));
         };
-        wakeTimer = new Timer(_ => desktop.Post(() => { if (!lifetime.IsCancellationRequested) RefreshWakeListening(); }), null, 100, 100);
+        wakeTimer = new Timer(_ => desktop.Post(() => { if (!lifetime.IsCancellationRequested) { RefreshWakeListening(); ReclaimIdleMemory(); } }), null, 100, 100);
     }
     private void SetWakeState(WakePreparation state)
     {

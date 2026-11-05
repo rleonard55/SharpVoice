@@ -1,5 +1,5 @@
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.1.8',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.1.9',
     [switch]$SkipTests
 )
 $ErrorActionPreference = 'Stop'
@@ -97,6 +97,11 @@ try {
     $null = Run-Tool (Join-Path $staging 'SharpVoice.exe') @('--verify-bundled-model',$bundledInfo) (Join-Path $work 'bundled-model.log')
     $bundled = Get-Content -LiteralPath $bundledInfo -Raw | ConvertFrom-Json
     if ($bundled.model -ne 'tiny.en-q5_1' -or $bundled.sha256 -ne $modelHash -or $bundled.network_requests -ne 0) { throw 'Packaged app failed offline default-model resolution.' }
+    if (-not $SkipTests) {
+        foreach ($activation in @('keep_ready','on_hotkey')) {
+            $null = Run-Tool (Join-Path $root '.build-cache/windows/bin/SharpVoice.Tests/release/SharpVoice.Tests.exe') @('--idle-memory-app',$modelCache,$activation) (Join-Path $work "idle-memory-$activation.log")
+        }
+    }
     $null = Run-Tool $dotnet @('tool','restore','--tool-manifest','.config/dotnet-tools.json') (Join-Path $work 'tool-restore.log')
     $packOutput = Join-Path $work 'releases'
     Write-Host 'Building per-user installer, portable ZIP and update feed...'

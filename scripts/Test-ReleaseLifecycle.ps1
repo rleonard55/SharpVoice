@@ -1,4 +1,4 @@
-param([string]$ReleaseDirectory = 'artifacts/releases/0.1.8')
+param([string]$ReleaseDirectory = 'artifacts/releases/0.1.9')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $dotnet = Join-Path $env:ProgramFiles 'dotnet/dotnet.exe'

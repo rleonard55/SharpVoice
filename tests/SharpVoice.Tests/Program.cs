@@ -12,6 +12,7 @@ using SharpVoice.Refiner.Auth;
 using SharpVoice.Speech;
 using SharpVoice.UI;
 
+if (args is ["--idle-memory-app", var idleModelRoot, var memoryActivation]) { WindowsHelpSmoke.RunIdleMemoryApp(idleModelRoot, memoryActivation); return 0; }
 if (args is ["--turnaround-whisper-benchmark", var turnaroundModel, var turnaroundWav]) { await TurnaroundChecks.Benchmark(turnaroundModel, turnaroundWav); return 0; }
 if (args is ["--turnaround-config-check"]) { await TurnaroundChecks.Preferences(); return 0; }
 if (args is ["--editor-hotkey-app", var editorHotkeyModels, var editorHotkeyGesture]) { WindowsHelpSmoke.RunEditorHotkeyApp(editorHotkeyModels, editorHotkeyGesture); return 0; }
