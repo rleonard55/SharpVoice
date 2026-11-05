@@ -38,7 +38,7 @@ public sealed partial class NativeDesktop
             + (view.ReadyVersion is null ? "" : "\r\nReady to Install: " + view.ReadyVersion));
         Win32.EnableWindow(Win32.GetDlgItem(toolsWindow, 4702), view.Supported && !view.Busy ? 1 : 0);
         Win32.EnableWindow(Win32.GetDlgItem(toolsWindow, 4703), view.Supported && !view.Busy && view.AvailableVersion is not null && view.ReadyVersion != view.AvailableVersion ? 1 : 0);
-        Win32.EnableWindow(Win32.GetDlgItem(toolsWindow, 4704), !view.Busy && view.ReadyVersion is not null ? 1 : 0);
+        Win32.EnableWindow(Win32.GetDlgItem(toolsWindow, 4704), view.Supported && !view.Busy ? 1 : 0);
     }
     private void OpenUpdates()
     {
@@ -52,7 +52,7 @@ public sealed partial class NativeDesktop
         toolFields["UpdateStatus"] = ToolControl("EDIT", "", 0x00A11844, 40, 298, 760, 108);
         ToolButton("Update Details", 4705, 40, 420, 210);
         toolFields["UpdateSummary"] = ToolControl("STATIC", "Updates from public GitHub Releases · rleonard55/SharpVoice\r\n\r\nAutomatic restart waits for idle. Restart clears memory-only conversations.", 0, 40, 474, 760, 112);
-        toolFields["UpdateDetails"] = ToolControl("EDIT", "Automatic checks run after startup and every six hours. Install When Idle waits for 60 quiet seconds and closed settings/review windows, including wake speech and recognition. Dictation, AI requests and spoken answers are never interrupted. Restart clears conversations kept only in memory.\r\n\r\nOff disables scheduled checks and automatic installation. Manual actions still work. Private repositories and draft releases are not visible to this public updater. Preferences, credentials and downloaded models are preserved through updates.", 0x00A11844, 40, 470, 760, 156);
+        toolFields["UpdateDetails"] = ToolControl("EDIT", "Automatic checks run after startup and every six hours. Install When Idle waits for 60 quiet seconds and closed settings/review windows, including wake speech and recognition. Dictation, AI requests and spoken answers are never interrupted. Restart clears conversations kept only in memory.\r\n\r\nInstall and Restart checks if needed, downloads and verifies any missing update, then restarts after active work finishes. Off disables scheduled checks and automatic installation. Manual actions still work. Private repositories and draft releases are not visible to this public updater. Preferences, credentials and downloaded models are preserved through updates.", 0x00A11844, 40, 470, 760, 156);
         Win32.ShowWindow(toolFields["UpdateDetails"], 0);
         ToolButton("Check for Updates", 4702, 40, 646, 230);
         ToolButton("Download Update", 4703, 294, 646, 230);

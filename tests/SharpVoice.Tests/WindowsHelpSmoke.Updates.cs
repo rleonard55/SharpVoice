@@ -1,9 +1,11 @@
+using System.Runtime.InteropServices;
 using SharpVoice.Core;
 using SharpVoice.Platform.Windows.Native;
 using SharpVoice.UI;
 
 internal static partial class WindowsHelpSmoke
 {
+    [LibraryImport("user32.dll", EntryPoint = "IsWindowEnabled")] private static partial int UpdateControlEnabled(nint window);
     private static unsafe void CheckUpdates(NativeDesktop desktop, Action<ThemeColors> changeTheme, string? output)
     {
         var window = desktop.SettingsHandle;
@@ -22,6 +24,19 @@ internal static partial class WindowsHelpSmoke
         Win32.SendMessageW(tool, 0x111, 4705, 0);
         if (Win32.IsWindowVisible(desktop.ToolField("UpdateDetails")) == 0) throw new Exception("Update details are not accessible on demand.");
         Win32.SendMessageW(tool, 0x111, 4705, 0);
+        var installButton = Win32.GetDlgItem(tool, 4704);
+        foreach (var state in new[] {
+            new AppUpdateView("0.1.0", "Ready to check."),
+            new AppUpdateView("0.1.0", "Update available.", "0.2.0"),
+            new AppUpdateView("0.1.0", "Update ready.", "0.2.0", "0.2.0") })
+        {
+            desktop.SetUpdateView(state);
+            if (UpdateControlEnabled(installButton) == 0) throw new Exception("Install and Restart must work before checking or downloading an update.");
+        }
+        desktop.SetUpdateView(new("0.1.0", "Downloading…", "0.2.0", Busy: true));
+        if (UpdateControlEnabled(installButton) != 0) throw new Exception("Busy updates must block repeated install clicks.");
+        desktop.SetUpdateView(new("Development", "Unsupported.", Supported: false));
+        if (UpdateControlEnabled(installButton) != 0) throw new Exception("Development builds must not offer release installation.");
         var check = 0; var download = 0; var install = 0;
         desktop.UpdateCheckRequested = () => check++;
         desktop.UpdateDownloadRequested = () => download++;

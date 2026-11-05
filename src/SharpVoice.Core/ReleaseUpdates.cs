@@ -54,18 +54,20 @@ public sealed class ReleaseUpdateCoordinator : IAsyncDisposable
     }
     public Task CheckAsync(bool scheduled = false, CancellationToken ct = default) => Start(downloadOnly: false, scheduled, ct);
     public Task DownloadAsync(CancellationToken ct = default) => Start(downloadOnly: true, scheduled: false, ct);
-    private Task Start(bool downloadOnly, bool scheduled, CancellationToken ct)
+    public Task<bool> PrepareInstallAsync(CancellationToken ct = default) => Start(downloadOnly: false, scheduled: false, ct, prepareInstall: true);
+    private Task<bool> Start(bool downloadOnly, bool scheduled, CancellationToken ct, bool prepareInstall = false)
     {
         lock (gate)
         {
-            if (disposed || restartRequested || view.Busy || !updater.Supported || (scheduled && !automatic)) return Task.CompletedTask;
-            if (downloadOnly && (view.AvailableVersion is null || view.ReadyVersion == view.AvailableVersion)) return Task.CompletedTask;
+            if (disposed || restartRequested || view.Busy || !updater.Supported || (scheduled && !automatic)) return Task.FromResult(false);
+            if (downloadOnly && (view.AvailableVersion is null || view.ReadyVersion == view.AvailableVersion)) return Task.FromResult(false);
             operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token, ct);
             automaticOperation = scheduled;
-            view = view with { Busy = true, Progress = 0, Status = downloadOnly ? "Downloading update…" : "Checking GitHub Releases…" };
+            view = view with { Busy = true, Progress = 0, Status = prepareInstall ? "Preparing update for restart…" : downloadOnly ? "Downloading update…" : "Checking GitHub Releases…" };
             var owner = operation;
-            work = Task.Run(() => Run(downloadOnly, scheduled, owner), CancellationToken.None);
-            return work;
+            var pending = Task.Run(() => Run(downloadOnly, scheduled, prepareInstall, owner), CancellationToken.None);
+            work = pending;
+            return pending;
         }
     }
     private void Publish(AppUpdateView next)
@@ -73,13 +75,14 @@ public sealed class ReleaseUpdateCoordinator : IAsyncDisposable
         lock (gate) { if (disposed) return; view = next; }
         Changed?.Invoke(next);
     }
-    private async Task Run(bool downloadOnly, bool scheduled, CancellationTokenSource owner)
+    private async Task<bool> Run(bool downloadOnly, bool scheduled, bool prepareInstall, CancellationTokenSource owner)
     {
         try
         {
             Changed?.Invoke(View);
             string? candidate;
-            if (downloadOnly) candidate = View.AvailableVersion;
+            if (downloadOnly || (prepareInstall && (View.AvailableVersion ?? updater.ReadyVersion) is not null))
+                candidate = View.AvailableVersion ?? updater.ReadyVersion;
             else
             {
                 candidate = await updater.CheckAsync(owner.Token).ConfigureAwait(false);
@@ -88,16 +91,19 @@ public sealed class ReleaseUpdateCoordinator : IAsyncDisposable
                     Status = candidate is null ? "No newer published release is available." : $"Version {candidate} is available." });
             }
             bool download;
-            lock (gate) download = downloadOnly || (scheduled && automatic && action is "download" or "install");
+            lock (gate) download = downloadOnly || prepareInstall || (scheduled && automatic && action is "download" or "install");
             if (candidate is not null && download && updater.ReadyVersion != candidate)
             {
                 owner.Token.ThrowIfCancellationRequested();
                 Publish(View with { Status = "Downloading and verifying update…" });
                 await updater.DownloadAsync(candidate, progress => Publish(View with { Progress = Math.Clamp(progress, 0, 100) }), owner.Token).ConfigureAwait(false);
                 owner.Token.ThrowIfCancellationRequested();
+                if (updater.ReadyVersion != candidate) throw new InvalidOperationException("The downloaded update is not verified for restart.");
                 Publish(View with { ReadyVersion = updater.ReadyVersion, Progress = 100,
                     Status = "Update downloaded and verified. Restart clears memory-only conversations." });
             }
+            owner.Token.ThrowIfCancellationRequested();
+            return prepareInstall && candidate is not null && updater.ReadyVersion == candidate;
         }
         catch (OperationCanceledException) when (owner.IsCancellationRequested)
         { Publish(View with { Status = "Update activity stopped. You can check again manually." }); }
@@ -109,6 +115,7 @@ public sealed class ReleaseUpdateCoordinator : IAsyncDisposable
             owner.Dispose();
             if (!disposed) Changed?.Invoke(View);
         }
+        return false;
     }
     public bool TryRequestRestart(bool manual, TimeSpan quietTime, bool hostCanRestart)
     {

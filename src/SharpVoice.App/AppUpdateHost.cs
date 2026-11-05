@@ -10,7 +10,7 @@ internal sealed class AppUpdateHost : IDisposable
     private readonly SharpVoiceApp app;
     private readonly ReleaseUpdateCoordinator updates;
     private readonly Timer timer;
-    private bool automatic;
+    private bool automatic, manualRestartPending;
     private long nextCheck = Environment.TickCount64 + 30_000, lastBusy = Environment.TickCount64, readyAt = Environment.TickCount64;
     private string? observedReady, notified;
     private volatile bool disposed;
@@ -24,7 +24,7 @@ internal sealed class AppUpdateHost : IDisposable
         updates.Changed += view => desktop.Post(() => { if (!disposed) Render(view); });
         desktop.UpdateCheckRequested = () => { _ = updates.CheckAsync(); Render(updates.View); };
         desktop.UpdateDownloadRequested = () => { _ = updates.DownloadAsync(); Render(updates.View); };
-        desktop.UpdateInstallRequested = () => RequestRestart(manual: true, TimeSpan.Zero);
+        desktop.UpdateInstallRequested = () => { if (!manualRestartPending) { _ = InstallAndRestartAsync(); Render(updates.View); } };
         desktop.UpdatePreferencesChanged = (enabled, action) =>
         {
             automatic = enabled; updates.SetPreferences(enabled, action);
@@ -38,6 +38,16 @@ internal sealed class AppUpdateHost : IDisposable
             desktop.Post(() => { Interlocked.Exchange(ref queued, 0); if (!disposed) Tick(); });
         }, null, 1000, 1000);
     }
+    private async Task InstallAndRestartAsync()
+    {
+        if (!await updates.PrepareInstallAsync().ConfigureAwait(false)) return;
+        desktop.Post(() =>
+        {
+            if (disposed) return;
+            manualRestartPending = true;
+            RequestRestart(manual: true, TimeSpan.Zero);
+        });
+    }
     private void Render(AppUpdateView view)
     {
         desktop.SetUpdateView(view);
@@ -49,22 +59,23 @@ internal sealed class AppUpdateHost : IDisposable
         if (app.UpdateIdle && (updates.View.ReadyVersion ?? updates.View.AvailableVersion) is { } version && version != notified)
         { notified = version; desktop.NotifyUpdate(version); }
         if (!app.UpdateIdle || desktop.UpdateRestartBlocked) lastBusy = now;
-        if (automatic && now >= nextCheck && !updates.View.Busy)
+        if (!manualRestartPending && automatic && now >= nextCheck && !updates.View.Busy)
         {
             nextCheck = now + (long)TimeSpan.FromHours(6).TotalMilliseconds;
             _ = updates.CheckAsync(scheduled: true);
         }
         var quiet = TimeSpan.FromMilliseconds(Math.Max(0, now - Math.Max(Math.Max(lastBusy, readyAt), app.LastUpdateActivity)));
-        RequestRestart(manual: false, quiet);
+        RequestRestart(manual: manualRestartPending, quiet);
     }
     private void RequestRestart(bool manual, TimeSpan quiet)
     {
         var canRestart = app.UpdateIdle && (manual || !desktop.UpdateRestartBlocked);
         if (!updates.TryRequestRestart(manual, quiet, canRestart))
         {
-            if (manual) desktop.SetUpdateView(updates.View with { Status = "Finish the active dictation, AI request or spoken answer before restarting." });
+            if (manual) desktop.SetUpdateView(updates.View with { Status = "Update ready. Waiting for active dictation, AI work or spoken answers to finish before restarting." });
             return;
         }
+        manualRestartPending = false;
         app.QuiesceForUpdate();
         desktop.ExitForUpdate();
     }

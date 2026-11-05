@@ -1,5 +1,5 @@
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.1.7',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.1.8',
     [switch]$SkipTests
 )
 $ErrorActionPreference = 'Stop'
@@ -42,6 +42,7 @@ try {
         if ($checks -notmatch '(\d+)/\1 checks passed\.') { throw 'The complete offline suite did not pass.' }
         $null = Run-Tool (Join-Path $root '.build-cache/windows/bin/SharpVoice.Tests/release/SharpVoice.Tests.exe') @('--windows-hud-window-smoke') (Join-Path $work 'hud-window.log')
         $null = Run-Tool (Join-Path $root '.build-cache/windows/bin/SharpVoice.Tests/release/SharpVoice.Tests.exe') @('--windows-onboarding-smoke') (Join-Path $work 'onboarding-window.log')
+        $null = Run-Tool (Join-Path $root '.build-cache/windows/bin/SharpVoice.Tests/release/SharpVoice.Tests.exe') @('--windows-updates-smoke') (Join-Path $work 'updates-window.log')
         $null = Run-Tool (Join-Path $root '.build-cache/windows/bin/SharpVoice.Tests/release/SharpVoice.Tests.exe') @('--windows-provider-diagnostics-smoke',(Join-Path $work 'provider-diagnostics')) (Join-Path $work 'provider-diagnostics-window.log')
     }
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'

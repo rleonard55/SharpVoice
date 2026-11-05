@@ -194,3 +194,7 @@ When sign-in succeeds but AI requests fail, use **AI & Models → Test Connectio
 The report is memory-only and excludes private text, credentials, internal hostnames and raw logs. Reopen to refresh its snapshot; Clear or exit discards the in-app records. Copy Report explicitly copies exactly the displayed snapshot. Clear does not erase clipboard history or reports already shared.
 
 Open GitHub Issue opens a fixed issue form without sending the report. Paste, review and submit there yourself. Public reports are associated with your GitHub account; sanitized does not mean anonymous. You can share with IT privately instead. See [privacy, included fields and TLS-inspection troubleshooting](privacy.md).
+
+## One-click update installation
+
+In **General → Updates**, **Install and Restart** is available before downloading. It checks for an update if needed, downloads and verifies it, then installs and restarts. A verified update already on disk is reused without downloading again. If dictation, AI work or answer playback is active, restart waits for it to finish. With no newer release or a download failure, the app stays open and shows the result; you can retry. Manual installation still works when Automatic Updates is Off. The button is disabled during update operations and in development builds. Restart clears memory-only conversations.

@@ -19,7 +19,7 @@ if (args is ["--windows-automatic-monitor-smoke"]) { WindowsSettingsSmoke.RunAut
 if (args is ["--editor-hotkey-check"]) { await EditorChecks.HotkeyHandoff(); await RecordingGestureChecks.ResumedToggle(); return 0; }
 if (args is ["--followup-check"]) { await FollowUpChecks.Contracts(); await FollowUpChecks.CanceledDelivery(); await AskAiChecks.StructuredQuestions(); await SuccessCueChecks.QuestionAsset(); return 0; }
 if (args is ["--answer-preferences-check"]) { await SmartAskChecks.AnswerPreferences(); return 0; }
-if (args is ["--updates-check"]) { await ReleaseUpdateChecks.Preferences(); await ReleaseUpdateChecks.Policy(); await ReleaseUpdateChecks.Cancellation(); return 0; }
+if (args is ["--updates-check"]) { await ReleaseUpdateChecks.Preferences(); await ReleaseUpdateChecks.Policy(); await ReleaseUpdateChecks.Cancellation(); await ReleaseUpdateChecks.OneClickInstall(); return 0; }
 if (args is ["--windows-provider-diagnostics-smoke", var providerOutput]) { WindowsHelpSmoke.Run(providerOutput, diagnosticsOnly: true); return 0; }
 if (args is ["--provider-rejection-check"]) { await ProviderDiagnosticChecks.RejectionGuidance(); return 0; }
 if (args is ["--provider-diagnostics-check"]) { await ProviderDiagnosticChecks.All(); return 0; }
@@ -224,6 +224,7 @@ if (args is ["--embedded-smoke"])
     return 0;
 }
 
+if (args is ["--windows-updates-smoke"]) { WindowsHelpSmoke.Run(updatesOnly: true); return 0; }
 if (args is ["--windows-help-smoke"]) { WindowsHelpSmoke.Run(); return 0; }
 if (args is ["--windows-help-smoke", var helpOutput]) { WindowsHelpSmoke.Run(helpOutput); return 0; }
 
@@ -886,6 +887,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Automatic update enablement and action are separate persistent preferences", ReleaseUpdateChecks.Preferences),
     ("Release updates obey notify, download, install and manual restart policy", ReleaseUpdateChecks.Policy),
     ("Disabling automatic updates cancels owned work without restarting", ReleaseUpdateChecks.Cancellation),
+    ("One-click install checks, downloads, reuses verified updates and blocks unsafe restarts", ReleaseUpdateChecks.OneClickInstall),
     ("Wake speech and prefix recognition block update restart before activation", ReleaseUpdateChecks.WakeEligibility),
     ("Installed sign-in startup resolves the stable launcher across updates", ReleaseUpdateChecks.StableStartup),
     ("Fast transcription preferences survive save and reload", TurnaroundChecks.Preferences),

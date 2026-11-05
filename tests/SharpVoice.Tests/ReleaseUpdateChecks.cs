@@ -88,6 +88,48 @@ internal static class ReleaseUpdateChecks
         }
     }
 
+    public static async Task OneClickInstall()
+    {
+        foreach (var action in new[] { "notify", "download", "install" })
+        {
+            var backend = new FakeUpdater();
+            await using var updates = new ReleaseUpdateCoordinator(backend, false, action);
+            Check(await updates.PrepareInstallAsync(), "One-click install must check and download without a prior check, even with automatic updates Off.");
+            Check(backend.Checks == 1 && backend.Downloads == 1 && backend.Applies == 0, "Install preparation must verify once and leave orderly shutdown to the host.");
+            Check(!updates.TryRequestRestart(true, TimeSpan.Zero, false), "Prepared manual install interrupted active work.");
+            Check(updates.TryRequestRestart(true, TimeSpan.Zero, true), "Prepared install could not restart after active work ended.");
+        }
+        var cached = new FakeUpdater { ReadyVersion = "0.2.0", Fail = true };
+        await using (var updates = new ReleaseUpdateCoordinator(cached, false, "notify"))
+        {
+            Check(await updates.PrepareInstallAsync(), "A verified cached update must install offline.");
+            Check(cached.Checks == 0 && cached.Downloads == 0, "A ready update was checked or downloaded again.");
+        }
+        var known = new FakeUpdater();
+        await using (var updates = new ReleaseUpdateCoordinator(known, false, "notify"))
+        {
+            await updates.CheckAsync();
+            Check(await updates.PrepareInstallAsync() && known.Checks == 1 && known.Downloads == 1, "A known candidate must download without another check.");
+        }
+        foreach (var backend in new[] { new FakeUpdater { Candidate = null }, new FakeUpdater { Fail = true }, new FakeUpdater { FailDownload = true }, new FakeUpdater { VerifyDownload = false }, new FakeUpdater { Supported = false } })
+        {
+            await using var updates = new ReleaseUpdateCoordinator(backend, false, "notify");
+            Check(!await updates.PrepareInstallAsync() && !updates.View.Busy, "No update, unsupported installs, failures and unverified downloads must not prepare a restart.");
+            Check(!updates.TryRequestRestart(true, TimeSpan.Zero, true), "Failed preparation allowed a restart.");
+        }
+        var blocked = new FakeUpdater { WaitForCancel = true };
+        await using (var updates = new ReleaseUpdateCoordinator(blocked, false, "notify"))
+        using (var cancel = new CancellationTokenSource())
+        {
+            var prepare = updates.PrepareInstallAsync(cancel.Token);
+            await blocked.Downloading.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Check(updates.View.Busy && !updates.TryRequestRestart(true, TimeSpan.Zero, true), "Download allowed an early restart.");
+            Check(!await updates.PrepareInstallAsync() && blocked.Downloads == 1, "Repeated install started overlapping work.");
+            cancel.Cancel();
+            Check(!await prepare && blocked.Canceled && !updates.View.Busy, "Canceled install preparation did not drain safely.");
+        }
+    }
+
     public static async Task Cancellation()
     {
         foreach (var change in new[] { "off", "notify" })
@@ -138,7 +180,9 @@ internal static class ReleaseUpdateChecks
     private static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
     private sealed class FakeUpdater : IReleaseUpdater
     {
-        public bool Supported => true;
+        public bool Supported { get; set; } = true;
+        public string? Candidate = "0.2.0";
+        public bool FailDownload, VerifyDownload = true;
         public string CurrentVersion => "0.1.0";
         public string? ReadyVersion { get; set; }
         public int Checks, Downloads, Applies;
@@ -148,7 +192,7 @@ internal static class ReleaseUpdateChecks
         {
             Checks++; ct.ThrowIfCancellationRequested();
             if (Fail) throw new IOException("private diagnostic detail");
-            return Task.FromResult<string?>("0.2.0");
+            return Task.FromResult(Candidate);
         }
         public async Task DownloadAsync(string version, Action<int> progress, CancellationToken ct)
         {
@@ -158,7 +202,9 @@ internal static class ReleaseUpdateChecks
                 try { await Task.Delay(Timeout.Infinite, ct); }
                 catch (OperationCanceledException) { Canceled = true; throw; }
             }
-            ct.ThrowIfCancellationRequested(); progress(50); ReadyVersion = version;
+            ct.ThrowIfCancellationRequested();
+            if (FailDownload) throw new IOException("private diagnostic detail");
+            progress(50); if (VerifyDownload) ReadyVersion = version;
         }
         public void ApplyAndRestart() => Applies++;
     }
