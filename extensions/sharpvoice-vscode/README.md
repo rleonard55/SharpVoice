@@ -10,7 +10,7 @@ Ask AI with an active file uses a separate conversation scoped to that file; wit
 
 Desktop Live Transcription displays provisional local Whisper drafts in the pill and panel. Draft words can change; the final full recording is transcribed after Stop. Audio Settings can disable drafts. Drafts are never pasted or sent to the LLM.
 
-Install/update through SharpVoice Settings → General → Plugins, then reload VS Code. Extension **0.3.2** requires desktop editor protocol **9**. Windows native local trusted workspaces only; WSL/remote and virtual documents are unsupported. The focused editor window subscribes automatically; inactive windows release the channel, including after an in-flight insertion finishes. Context permission is configurable as Selection Only, Nearby Code (default, up to32,000 characters), or Current Document when within bounds. Explicit selections take priority; nearby/document targets let named-block edits work without highlighting everything.
+Install/update through SharpVoice Settings → General → Plugins, then reload VS Code. Extension **0.3.3** requires desktop editor protocol **9**. Windows native local trusted workspaces only; WSL/remote and virtual documents are unsupported. The focused editor window subscribes automatically; inactive windows release the channel, including after an in-flight insertion finishes. Context permission is configurable as Selection Only, Nearby Code (default, up to32,000 characters), or Current Document when within bounds. Explicit selections take priority; nearby/document targets let named-block edits work without highlighting everything.
 
 The editor-title microphone/edit controls and Command Palette commands remain available. SharpVoice uses its selected provider/model; no provider credentials are stored in this extension.
 
@@ -28,7 +28,7 @@ Exact editor shortcuts work when spoken in Dictate/Edit Code, typed in the code 
 | **Explain** | Explain the initial selection or entire file in the conversation, without changing source. Uses the AI provider and the 32,000-character context bound. |
 | **Format** | Run the configured native selection/document formatter on the initial target. Use normal Undo to reverse formatting. |
 
-Names are case-insensitive and accept terminal speech punctuation. Longer requests remain normal AI instructions. Native commenting follows VS Code's selected-line behavior, including excluding the next line when the selection ends at column zero. Comment/Uncomment never call the AI provider. Document, Comment and Uncomment changes remain pending for Accept All/Revert All. Format behaves as a normal editor operation, preserving manual input during asynchronous formatting; it can mark overlapping pending AI edits as conflicted. Install extension 0.3.2 and the matching protocol-9 desktop build together.
+Names are case-insensitive and accept terminal speech punctuation. Longer requests remain normal AI instructions. Native commenting follows VS Code's selected-line behavior, including excluding the next line when the selection ends at column zero. Comment/Uncomment never call the AI provider. Document, Comment and Uncomment changes remain pending for Accept All/Revert All. Format behaves as a normal editor operation, preserving manual input during asynchronous formatting; it can mark overlapping pending AI edits as conflicted. Install extension 0.3.3 and the matching protocol-9 desktop build together.
 
 Language validity guards reject Comment and inline Document in strict JSON, JSON Lines, CSV and TSV; use Explain instead. JSONC (including settings.json in JSONC mode) retains comment support. AI replacements targeting JSON/JSON Lines must produce a valid complete document before insertion, even when only a fragment was selected. Uncomment can restore selected commented-out JSON code only when the resulting complete JSON is valid; strings containing URLs or comment-like characters stay unchanged. Other languages use their native editor support and provider instructions; this is not a general compiler or schema checker.
 
@@ -39,7 +39,7 @@ Ask AI and code-edit clarification questions appear in a highlighted card above 
 The AI can supply up to four suggested replies. Click a button to send that reply, or answer by typing or voice. No reply is selected automatically. Buttons are tied to their question, and clicking them never accepts pending edits. Code questions remain attached to the active source session; canceled code questions stay in history without active reply buttons.
 
 
-## IDE workflow tools (0.3.2)
+## IDE workflow tools (0.3.3)
 
 Expand **Code Tools** in the panel or use the Command Palette. The same package serves VS Code, VS Code Insiders and experimental Antigravity.
 
@@ -55,3 +55,5 @@ Expand **Code Tools** in the panel or use the Command Palette. The same package 
 - **Conventions:** Applicable workspace `AGENTS.md`, `.editorconfig` and common formatter/config files supply bounded literal guidance. Add personal/workspace preferences with `sharpvoice.codingInstructions`. The panel lists context/guidance files. User intent and language-validity rules win; repository instructions never execute tools. External paths, credential-like files and junction escapes are excluded from automatic related context.
 
 Review recovery is local to this workspace and editor installation. Provider/model settings continue to live in the desktop app. App and extension must be updated together for protocol 9. Actual Antigravity host compatibility remains experimental; automated native host verification uses isolated VS Code.
+
+The Blue + Indigo panel palette adapts to editor light/dark themes, preserves high-contrast editor colors, highlights questions in amber and recording controls in red.

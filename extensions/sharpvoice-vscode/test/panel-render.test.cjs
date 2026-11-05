@@ -7,6 +7,8 @@ test('sidebar renders provider text literally and keeps all conversation state o
  const hostile='<img src=x onerror="compromised=true"><script>compromised=true</script>';
  receive({data:{snapshot:{type:'workspace',host_id:'a',state:'idle',conversation:{id:'a'.repeat(32),scope:{domain:'general'},turns:[{request:'Recipe',response:hostile,status:'Answered'}]},conversations:[]}}});
  assert.equal(el('turns').children[0].children[3].textContent,hostile);assert.equal(context.compromised,false);
+ receive({data:{snapshot:{type:'workspace',host_id:'a',state:'recording'}}});assert.match(el('voice').className??'',/recording/);assert.equal(el('voice').textContent,'Stop Recording');
+ receive({data:{snapshot:{type:'workspace',host_id:'a',state:'idle'}}});assert.doesNotMatch(el('voice').className??'',/recording/);
  receive({data:{snapshot:{type:'workspace',host_id:'a',state:'idle',pending_changes:2,review_file:'test.cs',review_conflicts:1}}});
  assert.equal(el('accept').hidden,false);assert.equal(el('revert').hidden,false);assert.equal(el('send').disabled,false);assert.match(el('pending').textContent,/2/);
  el('accept').listeners.click();assert.equal(posted.at(-1).action,'accept');el('revert').listeners.click();assert.equal(posted.at(-1).action,'revert');

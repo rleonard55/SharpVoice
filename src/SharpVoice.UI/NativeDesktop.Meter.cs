@@ -50,7 +50,7 @@ public sealed partial class NativeDesktop
             if (meterHasGate && meterLevel >= meterGate)
             {
                 fill.Left = X(meterGate);
-                if (fill.Right > fill.Left) Win32.FillRect(dc, in fill, accent);
+                if (fill.Right > fill.Left) Win32.FillRect(dc, in fill, successBrush);
             }
         }
         if (meterHasGate)

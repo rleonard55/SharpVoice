@@ -17,7 +17,7 @@ public sealed partial class NativeDesktop : IDisposable
     private ThemeColors theme;
     private readonly Func<ThemeColors> themeProvider;
     private readonly Func<nint> foregroundWindow;
-    private nint background, inputBackground, accent, surfaceBrush, borderBrush, selectionBrush;
+    private nint background, inputBackground, accent, surfaceBrush, borderBrush, selectionBrush, successBrush;
     private readonly nint font = Win32.CreateFontW(-17, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
     private readonly nint headingFont = Win32.CreateFontW(-24, 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
     private readonly nint hudTitleFont = Win32.CreateFontW(-16, 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
@@ -341,7 +341,9 @@ public sealed partial class NativeDesktop : IDisposable
             if (self.HandlePresentationMessage(hwnd, message, wParam, lParam, out var presentationResult)) return presentationResult;
             if (message is 0x133 or 0x134 or 0x138)
             {
-                Win32.SetTextColor((nint)wParam, lParam == self.connectionStatus ? self.ConnectionStatusColor : lParam == self.answerModel || lParam == self.answerStatus ? self.theme.Muted : self.theme.Text);
+                var branded = lParam == self.settingsTitle || lParam == self.settingsTagline;
+                Win32.SetTextColor((nint)wParam, branded ? self.theme.HeaderText : lParam == self.monitoringIndicator ? self.inputMonitoringFailed ? self.theme.Warning : self.inputPreview ? self.theme.Success : self.theme.Muted : lParam == self.connectionStatus ? self.ConnectionStatusColor : lParam == self.answerModel || lParam == self.answerStatus ? self.theme.Muted : self.theme.Text);
+                if (branded) { Win32.SetBkMode((nint)wParam, 1); return Win32.GetStockObject(5); }
                 var inPage = self.pages.Any(page => page.Contains(lParam));
                 var field = message is 0x133 or 0x134 || lParam == self.previewControl;
                 var hot = field && self.ControlIsHovered(lParam);

@@ -17,6 +17,7 @@ internal static partial class WindowsHelpSmoke
         }
         uint Pixel(nint control)
         {
+            HoverUpdateWindow(control); // Complete pending native text/theme painting before comparing frames.
             Win32.GetClientRect(control, out var rect);
             var screen = GetDC(0); var dc = CreateCompatibleDC(screen);
             var bitmap = CreateCompatibleBitmap(screen, rect.Right, rect.Bottom);
@@ -95,9 +96,10 @@ internal static partial class WindowsHelpSmoke
         var plain = Pixel(apply);
         Win32.SendMessageW(apply, 0x200, 0, 0);
         Page(1);
-        Check(Pixel(apply) == plain, "Tab navigation retained a footer hover.");
+        Check(Pixel(apply) == plain, $"Tab navigation retained a footer hover.");
         Console.WriteLine("PASS native control hover, pointer leave, disabled controls, keyboard focus, editable combo children, draft preservation and both themes.");
     }
+    [LibraryImport("user32.dll", EntryPoint = "UpdateWindow")] private static partial int HoverUpdateWindow(nint window);
     [LibraryImport("user32.dll", EntryPoint = "SetFocus")] private static partial nint FocusHoverControl(nint window);
     [LibraryImport("user32.dll", EntryPoint = "GetWindow")] private static partial nint HoverChildWindow(nint window, uint command);
 }

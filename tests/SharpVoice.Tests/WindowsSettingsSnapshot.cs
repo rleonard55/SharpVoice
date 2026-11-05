@@ -57,6 +57,17 @@ internal static unsafe partial class WindowsSettingsSnapshot
                 throw new Exception($"Settings background did not match its theme: expected {palette.Background:X6}, got {GetPixel(dc, 16, 50):X6}.");
             }
             Render();
+            var frameLeft = rect.Left; var frameTop = rect.Top;
+            void CheckHeaderGraphic()
+            {
+                var origin = new Win32.Point(); ClientToScreen(window, &origin);
+                var clientX = origin.X - frameLeft; var clientY = origin.Y - frameTop;
+                uint Pixel(int x, int y) => GetPixel(dc, clientX + x, clientY + y);
+                if (Pixel(36, 16) == Pixel(680, 16)) throw new Exception("Brand header is flat; blue-to-indigo gradient is missing.");
+                if (Pixel(680, 25) == Pixel(680, 80)) throw new Exception("Brand header curved accent is missing.");
+                if (Pixel(620, 19) != Pixel(620, 21) || Pixel(620, 61) != Pixel(620, 63)) throw new Exception("Header text controls cover the graphic with solid rectangles.");
+            }
+            CheckHeaderGraphic();
             if (levelDb.HasValue && gateDb.HasValue && page == 0)
             {
                 var meterRect = new Win32.Rect();
@@ -70,7 +81,7 @@ internal static unsafe partial class WindowsSettingsSnapshot
                     throw new Exception("Gate marker was not rendered at the threshold.");
                 if (levelDb.Value > gateDb.Value && levelX - gateX > 2)
                 {
-                    if (GetPixel(dc, left + (gateX + levelX) / 2, top + 11) != palette.Accent)
+                    if (GetPixel(dc, left + (gateX + levelX) / 2, top + 11) != palette.Success)
                         throw new Exception("Above-gate audio was not highlighted.");
                 }
                 else if (levelX > 2 && GetPixel(dc, left + levelX / 2, top + 11) != palette.Border)
@@ -80,7 +91,7 @@ internal static unsafe partial class WindowsSettingsSnapshot
             {
                 palette = ThemeColors.Light;
                 Win32.SendMessageW(window, 0x1A, 0, 0);
-                Render();
+                Render(); CheckHeaderGraphic();
             }
             Win32.SelectObject(dc, previous);
             var info = new BitmapInfo { Size = 40, Width = width, Height = -height, Planes = 1, Bits = 32 };
@@ -102,6 +113,7 @@ internal static unsafe partial class WindowsSettingsSnapshot
         Console.WriteLine("PASS rendered OS-themed settings snapshot without taking desktop focus.");
     }
     [StructLayout(LayoutKind.Sequential)] private struct BitmapInfo { public uint Size; public int Width, Height; public ushort Planes, Bits; public uint Compression, ImageSize; public int Xppm, Yppm; public uint Used, Important; }
+    [LibraryImport("user32.dll")] private static partial int ClientToScreen(nint window, Win32.Point* point);
     [LibraryImport("user32.dll")] private static partial int SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
     [LibraryImport("user32.dll")] private static partial nint GetDC(nint window);
     [LibraryImport("user32.dll")] private static partial int ReleaseDC(nint window, nint dc);

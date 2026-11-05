@@ -34,6 +34,8 @@ function render(snapshot,live){const changedHost=current.host_id&&current.host_i
  }
  if(follow)view.scrollTop=view.scrollHeight;else view.scrollTop=oldScroll;
  el('omitted').hidden=!snapshot.conversation?.omitted;el('draft').hidden=!draft;el('draft').textContent=draft?'Live Draft · '+draft:'';
+ el('voice').className=state==='recording'?'primary recording':'primary';
+ el('status').className=snapshot.follow_up?'needs-answer':state==='recording'?'recording-status':'';
  el('voice').textContent=state==='recording'?'Stop Recording':state==='arming'?'Cancel Recording':snapshot.follow_up?'Reply by Voice':'Speak';el('voice').disabled=busy&&!['arming','recording'].includes(state);el('send').disabled=busy;el('reply').disabled=busy;el('cancel').disabled=['idle','busy','applying'].includes(state);const pending=snapshot.pending_changes??0;el('pending').hidden=!pending;el('pending').textContent=pending?`${snapshot.review_file??'Current file'} · ${pending} pending change${pending===1?'':'s'}${snapshot.review_conflicts?' · '+snapshot.review_conflicts+' overlap manual edits':''}`:'';
  el('accept').hidden=!pending;el('revert').hidden=!pending;el('review').hidden=!pending;for(const id of ['accept','revert','review'])el(id).disabled=busy||state==='clarify';
  for(const id of ['mode','includeFile','conversations'])el(id).disabled=busy;

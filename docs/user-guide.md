@@ -124,7 +124,7 @@ The pill HUD places its title at the top left and smaller, muted, right-aligned 
 
 ## VS Code conversation panel
 
-Update the companion extension through **Settings → General → Plugins → VS Code → Update**, then reload VS Code. Desktop and VSIX **0.3.2 / editor protocol 9** must be updated together. Click the **SharpVoice microphone** in the Activity Bar or status bar, or run **SharpVoice: Open Conversation Panel**.
+Update the companion extension through **Settings → General → Plugins → VS Code → Update**, then reload VS Code. Desktop and VSIX **0.3.3 / editor protocol 9** must be updated together. Click the **SharpVoice microphone** in the Activity Bar or status bar, or run **SharpVoice: Open Conversation Panel**.
 
 The panel offers **Ask AI**, **Dictate Code** and **Edit Code**, voice start/stop/cancel, typed replies, persistent clarification questions, recent conversations and New/Delete/Clear controls. The configured Ask AI shortcut opens read-only Ask AI in the focused plugin; outside a supported IDE it uses the desktop. Ask AI automatically includes the current filename, extension, language and highlighted code in a file-scoped conversation. **Include Current File** adds bounded surrounding/file content; without a selection it sends file details only unless that option is enabled. Without an active source file, Ask AI uses the desktop's general conversation. Code edits capture fresh source and enter the working file as pending changes. Review individual blocks, accept/revert the current file or all pending files, and optionally open a cumulative diff. Remembered conversation does not authorize another change.
 

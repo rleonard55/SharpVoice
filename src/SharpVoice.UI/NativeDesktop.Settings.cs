@@ -14,7 +14,7 @@ public sealed partial class NativeDesktop
     private List<AudioDeviceInfo> audioDevices = [];
     private int buildingPage = -1;
     private nint tabControl, gateSlider, inputMeter, inputLabel, captureLabel;
-    private nint signInButton, signOutButton, cancelButton, monitoringIndicator;
+    private nint signInButton, signOutButton, cancelButton, monitoringIndicator, settingsTitle, settingsTagline;
     private bool inputPreview, inputMonitoringFailed, settingsMinimized;
     private string modelBackend = "";
     public Action<bool>? InputPreviewChanged { get; set; }
@@ -57,9 +57,9 @@ public sealed partial class NativeDesktop
         modelBackend = config.Backend;
         var controls = new Win32.CommonControls { Size = (uint)sizeof(Win32.CommonControls), Classes = 0x2C };
         if (Win32.InitCommonControlsEx(in controls) == 0) throw new InvalidOperationException("Could not initialize Windows settings controls.");
-        var title = Control("STATIC", "SharpVoice", 0, 32, 20, 650, 36);
-        Win32.SendMessageW(title, 0x30, (nuint)headingFont, 1);
-        Control("STATIC", "Your voice. Your words. Wherever you work.", 0, 32, 62, 650, 24);
+        settingsTitle = Control("STATIC", "SharpVoice", 0xD, 32, 20, 650, 36);
+        Win32.SendMessageW(settingsTitle, 0x30, (nuint)headingFont, 1);
+        settingsTagline = Control("STATIC", "Your voice. Your words. Wherever you work.", 0xD, 32, 62, 650, 24);
         statusControl = Control("STATIC", SettingsStatus(status, false), 0, 32, 99, 605, 38, 1024);
         AddHelp("Status", "Status and Shortcuts", 1900, 99);
         tabControl = Control("SysTabControl32", "", 0x2900 | 0x10000, 24, 145, 680, 36, 1014);

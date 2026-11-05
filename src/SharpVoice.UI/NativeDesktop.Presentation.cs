@@ -22,10 +22,11 @@ public sealed partial class NativeDesktop
         surfaceBrush = Win32.CreateSolidBrush(theme.Surface);
         borderBrush = Win32.CreateSolidBrush(theme.Border);
         selectionBrush = Win32.CreateSolidBrush(theme.Selection);
+        successBrush = Win32.CreateSolidBrush(theme.Success);
     }
     private void DeleteThemeBrushes()
     {
-        foreach (var brush in new[] { background, inputBackground, accent, surfaceBrush, borderBrush, selectionBrush, accentHover })
+        foreach (var brush in new[] { background, inputBackground, accent, surfaceBrush, borderBrush, selectionBrush, accentHover, successBrush })
             if (brush != 0) Win32.DeleteObject(brush);
     }
     private void ApplyTheme()
@@ -70,7 +71,7 @@ public sealed partial class NativeDesktop
         Win32.SendMessageW(localDownloadBar, 0x2001, 0, (nint)theme.Field);
         Win32.SendMessageW(localDownloadBar, 0x409, 0, (nint)theme.Accent);
         Win32.SendMessageW(inputMeter, 0x2001, 0, (nint)theme.Field); // PBM_SETBKCOLOR
-        Win32.SendMessageW(inputMeter, 0x409, 0, (nint)theme.Accent); // PBM_SETBARCOLOR
+        Win32.SendMessageW(inputMeter, 0x409, 0, (nint)theme.Success); // PBM_SETBARCOLOR
         Win32.InvalidateRect(settingsWindow, 0, 1);
         Win32.InvalidateRect(hudWindow, 0, 1);
         foreach (var control in pages.SelectMany(x => x)) Win32.InvalidateRect(control, 0, 1);
@@ -142,7 +143,7 @@ public sealed partial class NativeDesktop
         4807 => "\uE720",
         _ => null
     };
-    private void DrawIconLabel(nint dc, string text, string? glyph, Win32.Rect rect, uint color)
+    private void DrawIconLabel(nint dc, string text, string? glyph, Win32.Rect rect, uint color, uint? iconColor = null)
     {
         if (glyph is null) { DrawLabel(dc, text, rect, color, 0x8825); return; }
         var measure = new Win32.Rect();
@@ -152,7 +153,7 @@ public sealed partial class NativeDesktop
         var textWidth = Math.Min(measure.Right - measure.Left, Math.Max(0, rect.Right - rect.Left - 28));
         var left = rect.Left + Math.Max(2, (rect.Right - rect.Left - textWidth - 24) / 2);
         var icon = rect; icon.Left = left; icon.Right = left + 18;
-        DrawMenuGlyph(dc, glyph, icon, color);
+        DrawMenuGlyph(dc, glyph, icon, iconColor ?? color);
         rect.Left = left + 24; rect.Right = rect.Left + textWidth;
         DrawLabel(dc, text, rect, color);
     }
@@ -213,6 +214,7 @@ public sealed partial class NativeDesktop
             Win32.FillRect((nint)wParam, in rect, background);
             if (hwnd == settingsWindow)
             {
+                PaintSettingsHeader((nint)wParam);
                 var card = new Win32.Rect { Left = 24, Top = 186, Right = 704, Bottom = 544 };
                 Rounded((nint)wParam, card, surfaceBrush, 16);
             }
@@ -228,6 +230,7 @@ public sealed partial class NativeDesktop
         if (message != 0x2B || lParam == 0) return false; // WM_DRAWITEM
         var draw = (Win32.DrawItem*)lParam;
         var box = draw->Rect;
+        if (draw->Type == 5 && DrawHeaderControl(draw)) { result = 1; return true; }
         if (draw->Type == 3)
         {
             var selected = (draw->State & 1) != 0;
@@ -259,7 +262,7 @@ public sealed partial class NativeDesktop
             var selected = Win32.SendMessageW(tabControl, 0x130B, 0, 0) == draw->ItemId;
             Win32.FillRect(draw->Dc, in box, background);
             if (selected) Rounded(draw->Dc, box, selectionBrush, 8);
-            if (draw->ItemId < TabNames.Length) DrawIconLabel(draw->Dc, TabNames[draw->ItemId], SettingsTabIcons[draw->ItemId], box, selected ? theme.Accent : theme.Muted);
+            if (draw->ItemId < TabNames.Length) DrawIconLabel(draw->Dc, TabNames[draw->ItemId], SettingsTabIcons[draw->ItemId], box, selected ? theme.Text : theme.Muted, theme.TabAccent((int)draw->ItemId));
             result = 1; return true;
         }
         if (draw->Type == 4)
@@ -299,7 +302,8 @@ public sealed partial class NativeDesktop
             Win32.SendMessageW(tabControl, 0x130A, (nuint)i, (nint)(&rect));
             rect.Left += 2; rect.Right -= 2; rect.Top += 1; rect.Bottom -= 1;
             if (i == selected || i == hoveredTab) Rounded(dc, rect, selectionBrush, 8);
-            DrawIconLabel(dc, TabNames[i], SettingsTabIcons[i], rect, i == selected ? theme.Accent : i == hoveredTab ? theme.Text : theme.Muted);
+            DrawIconLabel(dc, TabNames[i], SettingsTabIcons[i], rect, i == selected || i == hoveredTab ? theme.Text : theme.Muted, theme.TabAccent(i));
+            if (i == selected) { var underline = rect; underline.Top = underline.Bottom - 3; Win32.FillRect(dc, in underline, accent); }
         }
     }
 

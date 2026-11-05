@@ -471,6 +471,7 @@ if (args is ["--whisper-smoke", var modelPath, var wavPath])
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("Indigo light/dark palettes keep readable text and semantic status contrast", ThemeChecks.IndigoContrast),
     ("Provider diagnostics explain TLS without leaking exception text", ProviderDiagnosticChecks.TlsExplanation),
     ("Provider diagnostics retain only bounded allowlisted fields", ProviderDiagnosticChecks.JournalPrivacy),
     ("Provider diagnostics classify network errors without duplicate records", ProviderDiagnosticChecks.Categories),
