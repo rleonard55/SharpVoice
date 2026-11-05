@@ -70,8 +70,6 @@ public sealed partial class NativeDesktop
         Win32.SetWindowTheme(localDownloadBar, "", "");
         Win32.SendMessageW(localDownloadBar, 0x2001, 0, (nint)theme.Field);
         Win32.SendMessageW(localDownloadBar, 0x409, 0, (nint)theme.Accent);
-        Win32.SendMessageW(inputMeter, 0x2001, 0, (nint)theme.Field); // PBM_SETBKCOLOR
-        Win32.SendMessageW(inputMeter, 0x409, 0, (nint)theme.Success); // PBM_SETBARCOLOR
         Win32.InvalidateRect(settingsWindow, 0, 1);
         Win32.InvalidateRect(hudWindow, 0, 1);
         foreach (var control in pages.SelectMany(x => x)) Win32.InvalidateRect(control, 0, 1);
@@ -202,6 +200,7 @@ public sealed partial class NativeDesktop
     private unsafe bool HandlePresentationMessage(nint hwnd, uint message, nuint wParam, nint lParam, out nint result)
     {
         result = 0;
+        if (hwnd == settingsWindow && message == 0x4E && lParam != 0 && DrawInputMeter(lParam, out result)) return true;
         if (message is 0x1A or 0x31A or 0x15)
         {
             // System theme broadcasts arrive at each top-level window; update all surfaces once.
@@ -215,8 +214,17 @@ public sealed partial class NativeDesktop
             if (hwnd == settingsWindow)
             {
                 PaintSettingsHeader((nint)wParam);
-                var card = new Win32.Rect { Left = 24, Top = 186, Right = 704, Bottom = 544 };
+                var audioPage = tabControl != 0 && Win32.SendMessageW(tabControl, 0x130B, 0, 0) == 0;
+                var card = new Win32.Rect { Left = 24, Top = 186, Right = 704, Bottom = audioPage ? 470 : 544 };
                 Rounded((nint)wParam, card, surfaceBrush, 16);
+                if (audioPage)
+                {
+                    var input = new Win32.Rect { Left = 40, Top = 342, Right = 675, Bottom = 460 };
+                    Rounded((nint)wParam, input, borderBrush, 10);
+                    input.Left++; input.Right--; input.Top++; input.Bottom--; Rounded((nint)wParam, input, surfaceBrush, 8);
+                    var line = new Win32.Rect { Left = 54, Top = 414, Right = 661, Bottom = 415 };
+                    Win32.FillRect((nint)wParam, in line, borderBrush);
+                }
             }
             result = 1; return true;
         }

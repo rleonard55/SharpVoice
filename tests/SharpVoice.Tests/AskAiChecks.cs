@@ -24,6 +24,41 @@ internal static class AskAiChecks
         Check(calls == 1 && result.Kind == "clarify" && result.Choices.SequenceEqual(new[] { "Compact", "Expanded" }), "Structured provider choices did not reach the plugin.");
         Check(conversation.SystemInstructions == AnswerConversation.Instructions, "Structured call mutated ordinary desktop popup behavior.");
     }
+    public static async Task CompletedPluginAnswers()
+    {
+        var cases = new (string Raw, string Kind, string Text)[]
+        {
+            ("It assigns the value 42.", "answer", "It assigns the value 42."),
+            ("42", "answer", "42"),
+            ("```csharp\nint Add(int a, int b) => a + b;\n```", "answer", "```csharp\nint Add(int a, int b) => a + b;\n```"),
+            ("```json\n{\"kind\":\"answer\",\"text\":\"It assigns 42.\",\"choices\":[]}\n```", "answer", "It assigns 42."),
+            ("```\r\n{\"kind\":\"clarify\",\"text\":\"Which style?\",\"choices\":[\"Compact\",\"Expanded\"]}\r\n```", "clarify", "Which style?"),
+            ("{\"value\":42}", "answer", "{\"value\":42}"),
+            ("{\"kind\":\"Pod\",\"metadata\":{\"name\":\"example\"}}", "answer", "{\"kind\":\"Pod\",\"metadata\":{\"name\":\"example\"}}")
+        };
+        foreach (var fixture in cases)
+        {
+            var calls = 0;
+            using var http = new HttpClient(new Handler(_ => { calls++; return Task.FromResult(Response(fixture.Raw)); }));
+            var answer = await AnswerConversation.Start("Explain", "Earlier answer").ReplyStructuredAsync(new UnifiedRefiner(http, new Sessions()), "Explain this", "code", Config(), default);
+            Check(calls == 1 && answer.Kind == fixture.Kind && answer.Text == fixture.Text, "Completed read-only Ask answer was rejected or changed.");
+            Check(answer.Choices.Length == (fixture.Kind == "clarify" ? 2 : 0), "Plain answers acquired choices or fenced clarification lost its choices.");
+        }
+        foreach (var raw in new[] { "{\"kind\":\"answer\",\"text\":\"unfinished", "{\"kind\":\"clarify\",\"text\":\"Style?\",\"choices\":null}", "```json\n{\"kind\":\"answer\",\"text\":\"unfinished\",\"choices\":[]}" })
+        {
+            using var http = new HttpClient(new Handler(_ => Task.FromResult(Response(raw))));
+            var rejected = false;
+            try { await AnswerConversation.Start("Explain", "Earlier").ReplyStructuredAsync(new UnifiedRefiner(http, new Sessions()), "Explain this", "code", Config(), default); }
+            catch (InvalidDataException) { rejected = true; }
+            Check(rejected, "Malformed envelope was displayed as a plain answer.");
+        }
+        using var interrupted = new HttpClient(new Handler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("data: {\"type\":\"response.output_text.delta\",\"delta\":\"Partial answer\"}\n\n", Encoding.UTF8, "text/event-stream") })));
+        var failed = false;
+        try { await AnswerConversation.Start("Explain", "Earlier").ReplyStructuredAsync(new UnifiedRefiner(interrupted, new Sessions()), "Explain this", "code", Config(), default); }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException) { failed = true; }
+        Check(failed, "Interrupted provider output became a completed plain answer.");
+    }
+
     public static async Task EditorContextRequests()
     {
         var selected = "const answer = 42;";

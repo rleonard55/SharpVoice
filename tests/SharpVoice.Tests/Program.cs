@@ -18,6 +18,7 @@ if (args is ["--turnaround-config-check"]) { await TurnaroundChecks.Preferences(
 if (args is ["--editor-hotkey-app", var editorHotkeyModels, var editorHotkeyGesture]) { WindowsHelpSmoke.RunEditorHotkeyApp(editorHotkeyModels, editorHotkeyGesture); return 0; }
 if (args is ["--windows-automatic-monitor-smoke"]) { WindowsSettingsSmoke.RunAutomaticMonitoring(); return 0; }
 if (args is ["--editor-hotkey-check"]) { await EditorChecks.HotkeyHandoff(); await RecordingGestureChecks.ResumedToggle(); return 0; }
+if (args is ["--plugin-ask-check"]) { await AskAiChecks.CompletedPluginAnswers(); await AskAiChecks.StructuredQuestions(); await AskAiChecks.EditorContextRequests(); return 0; }
 if (args is ["--followup-check"]) { await FollowUpChecks.Contracts(); await FollowUpChecks.CanceledDelivery(); await AskAiChecks.StructuredQuestions(); await SuccessCueChecks.QuestionAsset(); return 0; }
 if (args is ["--answer-preferences-check"]) { await SmartAskChecks.AnswerPreferences(); return 0; }
 if (args is ["--updates-check"]) { await ReleaseUpdateChecks.Preferences(); await ReleaseUpdateChecks.Policy(); await ReleaseUpdateChecks.Cancellation(); await ReleaseUpdateChecks.OneClickInstall(); return 0; }
@@ -287,6 +288,7 @@ if (args is ["--windows-device-smoke"])
     return 0;
 }
 
+if (args is ["--windows-compact-audio-smoke"]) { WindowsHelpSmoke.RunCompactAudio(); return 0; }
 if (args is ["--windows-settings-smoke", var preset])
 {
     if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
@@ -473,6 +475,7 @@ if (args is ["--whisper-smoke", var modelPath, var wavPath])
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("Plugin Ask displays completed plain/fenced answers while rejecting malformed or interrupted output", AskAiChecks.CompletedPluginAnswers),
     ("Indigo light/dark palettes keep readable text and semantic status contrast", ThemeChecks.IndigoContrast),
     ("Provider diagnostics explain TLS without leaking exception text", ProviderDiagnosticChecks.TlsExplanation),
     ("Provider diagnostics retain only bounded allowlisted fields", ProviderDiagnosticChecks.JournalPrivacy),

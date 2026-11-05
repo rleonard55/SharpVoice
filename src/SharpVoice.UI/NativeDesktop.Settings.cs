@@ -13,7 +13,7 @@ public sealed partial class NativeDesktop
     private readonly Dictionary<string, string> promptDrafts = [];
     private List<AudioDeviceInfo> audioDevices = [];
     private int buildingPage = -1;
-    private nint tabControl, gateSlider, inputMeter, inputLabel, captureLabel;
+    private nint tabControl, gateSlider, inputMeter, inputLabel, captureLabel, lastResultLabel;
     private nint signInButton, signOutButton, cancelButton, monitoringIndicator, settingsTitle, settingsTagline;
     private bool inputPreview, inputMonitoringFailed, settingsMinimized;
     private string modelBackend = "";
@@ -81,16 +81,7 @@ public sealed partial class NativeDesktop
         Button("Refresh Microphones", 105, 250, 234, 210);
         monitoringIndicator = Control("STATIC", "Monitoring suspended", 0, 475, 242, 200, 25, 1042);
         AddChoice("Mic Activation", "MicrophoneActivation", 294, config.MicrophoneActivation, 1022);
-        inputLabel = Control("STATIC", "INPUT LEVEL · Waiting", 0, 40, 350, 635, 25, 1018);
-        inputMeter = Control("msctls_progress32", "Input level with noise gate marker", 0, 40, 380, 635, 22, 1016);
-        if (Win32.SetWindowSubclass(inputMeter, &MeterProcedure, 1, 0) == 0) throw new InvalidOperationException("Could not style the noise gate meter.");
-        AddEdit("Noise Gate · dB", "NoiseGateDb", 425, config.NoiseGateDb.ToString(CultureInfo.InvariantCulture), 1008);
-        gateSlider = Control("msctls_trackbar32", "", 0x10000 | 0x10, 244, 467, 391, 28, 1015);
-        Win32.SendMessageW(gateSlider, 0x407, 0, -90);
-        Win32.SendMessageW(gateSlider, 0x408, 1, 0);
-        Win32.SendMessageW(gateSlider, 0x405, 1, (nint)(int)config.NoiseGateDb);
-
-        AddChoice("Live Transcription", "LiveTranscription", 510, config.LiveTranscription ? "on" : "off", 1040);
+        BuildAudioInput();
 
         buildingPage = 1;
         AddChoice("Whisper Model", "SpeechModel", 196, config.SpeechModel, 1001);
@@ -156,9 +147,9 @@ public sealed partial class NativeDesktop
         Button("Connected Ask AI", 120, 40, 466, 285);
 
         buildingPage = -1;
-        Control("STATIC", "LAST RESULT", 0, 32, 550, 605, 22);
+        lastResultLabel = Control("STATIC", "LAST RESULT", 0, 32, 550, 605, 22);
         AddHelp("Turnaround", "Last Dictation Timing", 104, 550);
-        previewControl = Control("EDIT", "", 0x00A11844, 32, 578, 664, 92);
+        previewControl = Control("EDIT", "", 0x00A11844, 32, 578, 664, 92, 1043);
         Button("Apply Settings", 101, 32, 694, 176);
         cancelButton = Button("Cancel dictation", 108, 276, 694, 200);
         Win32.ShowWindow(cancelButton, active ? 5 : 0);
@@ -210,6 +201,9 @@ public sealed partial class NativeDesktop
         HideHelp();
         ClearControlHover();
         for (var i = 0; i < pages.Length; i++) foreach (var hwnd in pages[i]) Win32.ShowWindow(hwnd, i == page ? 5 : 0);
+        SetWindowPos(lastResultLabel, 0, 32, page == 0 ? 478 : 550, 605, 22, 0x14);
+        SetWindowPos(previewControl, 0, 32, page == 0 ? 506 : 578, 664, page == 0 ? 164 : 92, 0x14);
+        if (helpEntries.TryGetValue(2104, out var timing)) SetWindowPos(timing.Button, 0, 647, page == 0 ? 478 : 550, 26, 26, 0x14);
         RefreshInputMonitoring();
         if (page != 1) CancelConnectionTest();
         if (page != 3) CancelShortcutCapture();
@@ -297,7 +291,7 @@ public sealed partial class NativeDesktop
         {
             Hotkey = HotkeyDefinition.FromDisplayName(Text(fields["Hotkey"])),
             AskHotkey = HotkeyDefinition.FromDisplayName(Text(fields["AskHotkey"])),
-            LiveTranscription = SelectedChoice("LiveTranscription") == "on",
+            LiveTranscription = Win32.SendMessageW(fields["LiveTranscription"], 0xF0, 0, 0) == 1,
             FastTranscription = SelectedChoice("SpeechProcessing") == "fast",
             AudioDeviceId = SelectedDeviceId(), MicrophoneActivation = SelectedChoice("MicrophoneActivation"),
             RecordingGesture = SelectedChoice("RecordingGesture"),
@@ -372,7 +366,13 @@ public sealed partial class NativeDesktop
         }
         if (message == 0x114 && lParam == gateSlider)
         {
-            Win32.SetWindowTextW(fields["NoiseGateDb"], ((int)Win32.SendMessageW(gateSlider, 0x400, 0, 0)).ToString(CultureInfo.InvariantCulture));
+            var value = (int)Win32.SendMessageW(gateSlider, 0x400, 0, 0);
+            // Native keys/drag use whole-decibel steps. A no-op/end-track must not
+            // round an exact fractional value entered in the adjacent edit.
+            if ((wParam & 0xFFFF) != 8 && (!float.TryParse(Text(fields["NoiseGateDb"]), CultureInfo.InvariantCulture, out var draft)
+                || draft is < -90 or > 0 || MathF.Round(draft) != value))
+                Win32.SetWindowTextW(fields["NoiseGateDb"], value.ToString(CultureInfo.InvariantCulture));
+            RefreshInputMeter();
             return true;
         }
         if (message == 0x113 && wParam == 3)
@@ -398,7 +398,7 @@ public sealed partial class NativeDesktop
         if (notification == 0x300 && id == 1008 && gateSlider != 0 && fields.TryGetValue("NoiseGateDb", out var edit))
         {
             if (float.TryParse(Text(edit), CultureInfo.InvariantCulture, out var value) && value is >= -90 and <= 0)
-                Win32.SendMessageW(gateSlider, 0x405, 1, (nint)(int)value);
+                Win32.SendMessageW(gateSlider, 0x405, 1, (nint)(int)MathF.Round(value));
             RefreshInputMeter();
             return true;
         }

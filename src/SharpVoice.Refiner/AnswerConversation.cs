@@ -59,7 +59,7 @@ public sealed class AnswerConversation
     public async Task<FollowUpAnswer> ReplyStructuredAsync(UnifiedRefiner refiner, string request, string process, AppConfig config, CancellationToken ct)
     {
         var conversation = new AnswerConversation(exchanges, source) { structured = true, editorContext = editorContext };
-        return FollowUpAnswer.Parse(await conversation.ReplyAsync(refiner, request, process, config, ct));
+        return FollowUpAnswer.FromCompletedResponse(await conversation.ReplyAsync(refiner, request, process, config, ct));
     }
     public async Task<string> ReplyAsync(UnifiedRefiner refiner, string request, string process, AppConfig config, CancellationToken ct)
     {

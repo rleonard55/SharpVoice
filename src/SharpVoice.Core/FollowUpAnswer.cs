@@ -27,6 +27,44 @@ public sealed record FollowUpAnswer(string Kind, string Text, string[] Choices)
         });
         await delivered.Task.WaitAsync(ct).ConfigureAwait(false);
     }
+    /// <summary>For completed read-only Ask replies only; editor action schemas remain strict.</summary>
+    public static FollowUpAnswer FromCompletedResponse(string response)
+    {
+        if (string.IsNullOrWhiteSpace(response) || response.Length > 200000)
+            throw new InvalidDataException("The AI returned an empty or oversized answer. Try again.");
+        var text = response.Trim();
+        var candidate = text;
+        if (text.StartsWith("```", StringComparison.Ordinal) && text.IndexOf('\n') is var lineEnd && lineEnd >= 3)
+        {
+            var tag = text[3..lineEnd].Trim();
+            if (tag.Length == 0 || tag.Equals("json", StringComparison.OrdinalIgnoreCase))
+            {
+                var body = text[(lineEnd + 1)..].Trim();
+                if (body.EndsWith("```", StringComparison.Ordinal)) candidate = body[..^3].Trim();
+                else if (tag.Length != 0 || body.StartsWith('{') || body.StartsWith('['))
+                    throw new InvalidDataException("The AI returned an incomplete structured answer. Try again.");
+            }
+        }
+        JsonDocument document;
+        try { document = JsonDocument.Parse(candidate); }
+        catch (JsonException ex)
+        {
+            if (candidate.StartsWith('{') || candidate.StartsWith('['))
+                throw new InvalidDataException("The AI returned an incomplete structured answer. Try again.", ex);
+            return new("answer", text, []);
+        }
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind == JsonValueKind.Object && (root.TryGetProperty("choices", out _)
+                || root.TryGetProperty("kind", out var kind) && kind.ValueKind == JsonValueKind.String && kind.GetString() is "answer" or "clarify"))
+                return Parse(candidate);
+        }
+        // Requested JSON samples, code and ordinary text are displayed as content,
+        // never inferred to be a clarification or an executable editor action.
+        return new("answer", text, []);
+    }
+
     public static FollowUpAnswer Parse(string json)
     {
         try

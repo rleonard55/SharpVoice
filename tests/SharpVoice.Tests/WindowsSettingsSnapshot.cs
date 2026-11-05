@@ -70,21 +70,22 @@ internal static unsafe partial class WindowsSettingsSnapshot
             CheckHeaderGraphic();
             if (levelDb.HasValue && gateDb.HasValue && page == 0)
             {
-                var meterRect = new Win32.Rect();
-                GetWindowRect(Win32.GetDlgItem(window, 1016), &meterRect);
-                var left = meterRect.Left - rect.Left;
-                var top = meterRect.Top - rect.Top;
-                var meterWidth = meterRect.Right - meterRect.Left;
-                var gateX = (int)MathF.Round(Math.Clamp((gateDb.Value + 100) / 100, 0, 1) * meterWidth);
-                var levelX = (int)MathF.Round(Math.Clamp((levelDb.Value + 100) / 100, 0, 1) * meterWidth);
-                if (GetPixel(dc, left + Math.Clamp(gateX - 1, 0, meterWidth - 2), top + 2) != palette.Text)
-                    throw new Exception("Gate marker was not rendered at the threshold.");
-                if (levelDb.Value > gateDb.Value && levelX - gateX > 2)
+                var meter = Win32.GetDlgItem(window, 1015);
+                var meterRect = new Win32.Rect(); GetWindowRect(meter, &meterRect);
+                var left = meterRect.Left - rect.Left; var top = meterRect.Top - rect.Top;
+                var channel = new Win32.Rect(); var thumb = new Win32.Rect();
+                Win32.SendMessageW(meter, 0x41A, 0, (nint)(&channel)); Win32.SendMessageW(meter, 0x419, 0, (nint)(&thumb));
+                var gateX = channel.Left + (int)MathF.Round(Math.Clamp((gateDb.Value + 90) / 90, 0, 1) * (channel.Right - channel.Left));
+                var levelX = channel.Left + (int)MathF.Round(Math.Clamp((levelDb.Value + 90) / 90, 0, 1) * (channel.Right - channel.Left));
+                if (GetPixel(dc, left + gateX - 5, top + 15) != palette.Text)
+                    throw new Exception("Combined gate handle was not rendered at the exact draft threshold position.");
+                if (levelDb.Value > gateDb.Value && levelX - gateX > 14)
                 {
-                    if (GetPixel(dc, left + (gateX + levelX) / 2, top + 11) != palette.Success)
+                    if (GetPixel(dc, left + (gateX + levelX) / 2, top + 15) != palette.Success)
                         throw new Exception("Above-gate audio was not highlighted.");
                 }
-                else if (levelX > 2 && GetPixel(dc, left + levelX / 2, top + 11) != palette.Border)
+                else if (levelDb.Value < gateDb.Value && levelX > channel.Left + 2
+                    && GetPixel(dc, left + (channel.Left + levelX) / 2, top + 15) != palette.Border)
                     throw new Exception("Below-gate audio was not muted.");
             }
             if (style == "switch")
