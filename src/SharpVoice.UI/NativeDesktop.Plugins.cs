@@ -10,11 +10,17 @@ public sealed partial class NativeDesktop
     private long pluginGeneration;
     private nint pluginInstallButton, pluginRefreshButton, pluginProgress;
     private EditorPluginStatus? selectedPlugin;
+    private string pluginUpdateStatus = "Installed IDE plugins update automatically with SharpVoice. Choose an editor to check its status.";
+    public void SetPluginUpdateStatus(string message)
+    {
+        pluginUpdateStatus = message;
+        if (!disposed && toolsKind == "plugins" && toolsWindow != 0) Win32.SetWindowTextW(toolsNotice, message);
+    }
 
     private void OpenPlugins()
     {
         StartToolsWindow("plugins", "Plugins");
-        Win32.SetWindowTextW(toolsNotice, "Add SharpVoice voice coding and reviewed edits to your editor. Choose an editor to check its plugin.");
+        Win32.SetWindowTextW(toolsNotice, pluginUpdateStatus);
         foreach (var target in EditorPlugins.Targets) AddToolListItem(target.Name);
         ToolEdit("PluginEditor", "Editor Location", 104, 64, multiline: true, readOnly: true);
         ToolEdit("PluginBundled", "Included Plugin Version", 210, readOnly: true);

@@ -10,6 +10,7 @@ internal sealed class AppUpdateHost : IDisposable
     private readonly SharpVoiceApp app;
     private readonly ReleaseUpdateCoordinator updates;
     private readonly Timer timer;
+    private readonly Func<bool> pluginMaintenanceIdle;
     private bool automatic, manualRestartPending;
     private long nextCheck = Environment.TickCount64 + 30_000, lastBusy = Environment.TickCount64, readyAt = Environment.TickCount64;
     private string? observedReady, notified;
@@ -17,8 +18,9 @@ internal sealed class AppUpdateHost : IDisposable
     private int queued;
     internal bool RestartRequested => updates.RestartRequested;
 
-    internal AppUpdateHost(AppConfig config, NativeDesktop desktop, SharpVoiceApp app, IReleaseUpdater backend)
+    internal AppUpdateHost(AppConfig config, NativeDesktop desktop, SharpVoiceApp app, IReleaseUpdater backend, Func<bool>? pluginMaintenanceIdle = null)
     {
+        this.pluginMaintenanceIdle = pluginMaintenanceIdle ?? (() => true);
         this.desktop = desktop; this.app = app; automatic = config.AutomaticUpdates;
         updates = new(backend, config.AutomaticUpdates, config.UpdateAction);
         updates.Changed += view => desktop.Post(() => { if (!disposed) Render(view); });
@@ -58,7 +60,7 @@ internal sealed class AppUpdateHost : IDisposable
         var now = Environment.TickCount64;
         if (app.UpdateIdle && (updates.View.ReadyVersion ?? updates.View.AvailableVersion) is { } version && version != notified)
         { notified = version; desktop.NotifyUpdate(version); }
-        if (!app.UpdateIdle || desktop.UpdateRestartBlocked) lastBusy = now;
+        if (!app.UpdateIdle || !pluginMaintenanceIdle() || desktop.UpdateRestartBlocked) lastBusy = now;
         if (!manualRestartPending && automatic && now >= nextCheck && !updates.View.Busy)
         {
             nextCheck = now + (long)TimeSpan.FromHours(6).TotalMilliseconds;
@@ -69,10 +71,10 @@ internal sealed class AppUpdateHost : IDisposable
     }
     private void RequestRestart(bool manual, TimeSpan quiet)
     {
-        var canRestart = app.UpdateIdle && (manual || !desktop.UpdateRestartBlocked);
+        var canRestart = app.UpdateIdle && pluginMaintenanceIdle() && (manual || !desktop.UpdateRestartBlocked);
         if (!updates.TryRequestRestart(manual, quiet, canRestart))
         {
-            if (manual) desktop.SetUpdateView(updates.View with { Status = "Update ready. Waiting for active dictation, AI work or spoken answers to finish before restarting." });
+            if (manual) desktop.SetUpdateView(updates.View with { Status = "Update ready. Waiting for active dictation, AI work, spoken answers or plugin updates to finish before restarting." });
             return;
         }
         manualRestartPending = false;

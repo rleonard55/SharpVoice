@@ -7,11 +7,13 @@ public sealed partial class NativeDesktop
     private readonly List<ConnectedTool> connectedCatalog=[];private readonly HashSet<string> connectedAllowed=new(StringComparer.Ordinal);
     private readonly List<ConnectedTool> connectedVisible=[];private bool connectedShowUnavailable;
     private CancellationTokenSource? connectedDiscovery;private long connectedDiscoveryGeneration;
+    private string connectedCatalogPath = "";
     private void OpenConnectedSettings()
     {
         StartToolsWindow("connected","Connected Ask AI");connectedCatalog.Clear();connectedVisible.Clear();connectedShowUnavailable=false;connectedAllowed.Clear();connectedAllowed.UnionWith(config.ConnectedTools);
         Win32.SetWindowTextW(toolsNotice,"Use existing Windows Codex connections. Reads show activity; supported changes require a complete diff and on-screen approval.");
         ToolCombo("ConnectedAsk","Connected Ask AI",104,["Off (Default)","On (Use Selected Codex Tools)"]);Win32.SendMessageW(toolFields["ConnectedAsk"],0x14E,config.ConnectedAsk?1u:0u,0);
+        connectedCatalogPath=config.ConnectedCodexPath.Trim();
         ToolEdit("ConnectedPath","Windows Codex Executable (Blank: Auto-Detect)",190);Win32.SetWindowTextW(toolFields["ConnectedPath"],config.ConnectedCodexPath);
         ToolEdit("ConnectedState","Connection and Permissions",276,96,multiline:true,readOnly:true);
         ToolEdit("ConnectedTool","Selected Capability",414,96,multiline:true,readOnly:true);
@@ -79,14 +81,23 @@ public sealed partial class NativeDesktop
     {
         ++connectedDiscoveryGeneration;var old=connectedDiscovery;connectedDiscovery=null;old?.Cancel();if(disposed)old?.Dispose();
     }
+    private void ConnectedPathChanged()
+    {
+        var path=Text(toolFields["ConnectedPath"]).Trim();
+        if(string.Equals(path,connectedCatalogPath,StringComparison.OrdinalIgnoreCase))return;
+        connectedCatalogPath=path;CancelConnectedDiscovery();connectedCatalog.Clear();connectedAllowed.Clear();
+        if(!toolFields.ContainsKey("ConnectedState"))return;
+        RenderConnectedCatalog();
+        Win32.SetWindowTextW(toolFields["ConnectedState"],"Executable changed. Discover its tools and choose permissions again before enabling Connected Ask.");
+    }
     private void DiscoverConnected()
     {
         if(toolsKind!="connected"||connectedDiscovery is not null)return;
-        var owner=new CancellationTokenSource(TimeSpan.FromSeconds(90));connectedDiscovery=owner;var id=++connectedDiscoveryGeneration;var handler=ConnectedDiscoveryRequested;var path=Text(toolFields["ConnectedPath"]);
+        var owner=new CancellationTokenSource(TimeSpan.FromSeconds(90));connectedDiscovery=owner;var id=++connectedDiscoveryGeneration;var handler=ConnectedDiscoveryRequested;var path=Text(toolFields["ConnectedPath"]).Trim();
         Win32.SetWindowTextW(toolFields["ConnectedState"],"Discovering the selected Windows Codex profile. No email contents or actions are requested…");
-        _=CompleteConnectedDiscoveryAsync(Task.Run(()=>handler is null?Task.FromException<ConnectedTool[]>(new InvalidOperationException("Connected discovery unavailable.")):handler(path,owner.Token)),owner,id);
+        _=CompleteConnectedDiscoveryAsync(Task.Run(()=>handler is null?Task.FromException<ConnectedTool[]>(new InvalidOperationException("Connected discovery unavailable.")):handler(path,owner.Token)),owner,id,path);
     }
-    private async Task CompleteConnectedDiscoveryAsync(Task<ConnectedTool[]> task,CancellationTokenSource owner,long id)
+    private async Task CompleteConnectedDiscoveryAsync(Task<ConnectedTool[]> task,CancellationTokenSource owner,long id,string path)
     {
         ConnectedTool[]? result=null;string? error=null;
         try{result=await task.ConfigureAwait(false);}catch(OperationCanceledException){error="Discovery canceled or timed out.";}catch(Exception ex){error=ex is InvalidOperationException or InvalidDataException?ex.Message:"Could not discover Codex tools. Check its Windows installation and sign-in.";}
@@ -96,7 +107,7 @@ public sealed partial class NativeDesktop
         {
             if(id!=connectedDiscoveryGeneration||!ReferenceEquals(owner,connectedDiscovery)||toolsKind!="connected"){owner.Dispose();return;}
             connectedDiscovery=null;owner.Dispose();
-            if(result is not null&&!canceled)
+            if(result is not null&&!canceled&&string.Equals(path,Text(toolFields["ConnectedPath"]).Trim(),StringComparison.OrdinalIgnoreCase))
             {
                 connectedCatalog.Clear();connectedCatalog.AddRange(result.OrderBy(x=>x.Server,StringComparer.Ordinal).ThenBy(x=>x.Name,StringComparer.Ordinal));RenderConnectedCatalog();
                 Win32.SetWindowTextW(toolFields["ConnectedState"],result.Length==0?"No connected tools with inspectable schemas are exposed by this Windows Codex profile. Enable connections in Codex first; ChatGPT-only or WSL connections may differ.":$"Runtime: {(Text(toolFields["ConnectedPath"]).Trim() is {Length:>0} selectedPath ? selectedPath : SharpVoice.Platform.Windows.CodexRpc.FindExecutable()) ?? "Select a Windows Codex executable"}\r\nProfile: {Environment.GetEnvironmentVariable("CODEX_HOME") ?? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex")}\r\n{result.Count(x=>x.Supported)} available · {result.Count(x=>!x.Supported)} unavailable (hidden by default). {connectedAllowed.Count} permissions in this draft. Choose individual tools or Allow All Available Tools, then Save Changes. Changes still require review.");

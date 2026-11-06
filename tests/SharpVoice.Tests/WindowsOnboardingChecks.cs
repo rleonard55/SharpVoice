@@ -77,12 +77,12 @@ internal static partial class WindowsOnboardingChecks
                 Win32.SendMessageW(desktop.SetupHandle, 0x1A, 0, 0);
                 Render(theme, "microphone");
                 Check(WindowsHelpSmoke.RenderHelp(Item(4808), null, 16, 560) == theme.Field, "Microphone selector did not follow the form theme.");
-                Click(4803); Click(4805);
+                Click(4803); Render(theme, "shortcuts"); Click(4805);
                 Check(Win32.IsWindowVisible(desktop.SettingsHandle) != 0 && Win32.SendMessageW(Win32.GetDlgItem(desktop.SettingsHandle, 1014), 0x130B, 0, 0) == 3,
                     "Shortcut customization did not use the existing Hotkeys page.");
                 Win32.SendMessageW(desktop.SettingsHandle, 0x10, 0, 0);
                 Check(Win32.IsWindowVisible(desktop.SetupHandle) != 0, "Closing settings did not resume setup.");
-                Click(4803); Click(4806);
+                Click(4803); Render(theme, "ai"); Click(4806);
                 Check(Win32.SendMessageW(Win32.GetDlgItem(desktop.SettingsHandle, 1014), 0x130B, 0, 0) == 1, "AI setup did not use AI & Models.");
                 var backend = Win32.GetDlgItem(desktop.SettingsHandle, 1002);
                 Win32.SendMessageW(backend, 0x14E, 1, 0);
@@ -90,13 +90,18 @@ internal static partial class WindowsOnboardingChecks
                 desktop.ApplySettings();
                 Check(applied.Backend == "chatgpt_oauth" && Win32.IsWindowVisible(desktop.SetupHandle) != 0, "Applied AI choice did not return to setup.");
                 Click(4803);
+                Check(Item(4809) != 0 && HoverIsWindowEnabled(Item(4809)) == 0, "Empty practice must disable Clear Text.");
                 var session = desktop.SetupSession;
                 Click(4807);
                 Check(recording && HoverIsWindowEnabled(Item(4803)) == 0 && HoverIsWindowEnabled(Item(4801)) != 0, "Practice must block Next but keep Skip available.");
                 desktop.SetSetupPracticeResult("Synthetic practice sentence.", session);
                 desktop.SetSetupPracticeResult("Stale text", session - 1);
                 Check(Text(Item(4810)) == "Synthetic practice sentence.", "Practice output or stale-result protection failed.");
+                Click(4809); Check(Text(Item(4810)) == "Synthetic practice sentence.", "Clear must not erase practice while recording.");
                 Click(4807); Check(!recording, "Practice stop did not route to the host.");
+                Check(HoverIsWindowEnabled(Item(4809)) != 0, "Completed practice must enable Clear Text.");
+                Click(4809); Check(Text(Item(4810)).Length == 0 && HoverIsWindowEnabled(Item(4809)) == 0, "Clear Text did not clear and disable itself.");
+                desktop.SetSetupPracticeResult("Synthetic practice sentence.", session);
                 Render(theme, "practice");
                 Click(4803);
                 Check(!desktop.SetupOpen && ConfigManager.Load(path).Backend == "chatgpt_oauth", "Finish reset AI preferences or left setup open.");

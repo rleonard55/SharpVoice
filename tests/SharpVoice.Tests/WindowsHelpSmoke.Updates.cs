@@ -31,7 +31,7 @@ internal static partial class WindowsHelpSmoke
             new AppUpdateView("0.1.0", "Update ready.", "0.2.0", "0.2.0") })
         {
             desktop.SetUpdateView(state);
-            if (UpdateControlEnabled(installButton) == 0) throw new Exception("Install and Restart must work before checking or downloading an update.");
+            if ((UpdateControlEnabled(installButton) != 0) != (state.AvailableVersion is not null || state.ReadyVersion is not null)) throw new Exception("Install And Restart must require an available or ready update.");
         }
         desktop.SetUpdateView(new("0.1.0", "Downloading…", "0.2.0", Busy: true));
         if (UpdateControlEnabled(installButton) != 0) throw new Exception("Busy updates must block repeated install clicks.");
@@ -41,6 +41,9 @@ internal static partial class WindowsHelpSmoke
         desktop.UpdateCheckRequested = () => check++;
         desktop.UpdateDownloadRequested = () => download++;
         desktop.UpdateInstallRequested = () => install++;
+        desktop.SetUpdateView(new("0.1.0", "No update available."));
+        Win32.SendMessageW(tool, 0x111, 4703, 0); Win32.SendMessageW(tool, 0x111, 4704, 0);
+        if (download != 0 || install != 0) throw new Exception("Unavailable update commands must not run.");
         desktop.SetUpdateView(new("0.1.0", "Version 0.2.0 is available.", "0.2.0"));
         Win32.SendMessageW(tool, 0x111, 4702, 0); Win32.SendMessageW(tool, 0x111, 4703, 0);
         desktop.SetUpdateView(new("0.1.0", "Update downloaded and verified.", "0.2.0", "0.2.0"));

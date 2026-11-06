@@ -212,7 +212,7 @@ export class VoiceEditorController implements vscode.Disposable,vscode.TextDocum
   if(intent.action==='review'){await this.reviewChanges();return;}
   if(intent.action==='apply'||intent.action==='accept'){this.acceptAll();return;}
   if(intent.action==='revert'){await this.revertAll();return;}
-  if(intent.action==='cancel'){if(this.session)this.cancel();else this.channel.send({type:'workspace_cancel'});return;}
+  if(intent.action==='cancel'){this.cancel();return;}
   if(intent.action==='stop'){if(this.session)this.stop();else this.channel.send({type:'workspace_stop'});return;}
   if(this.session?.state==='clarify'&&['reply','start','send'].includes(intent.action)){await this.clarify(intent.text);return;}
   if(['start','send'].includes(intent.action)&&intent.mode!=='ask') {await this.start(intent.mode??'dictate',intent.text,epoch);return;}
@@ -237,12 +237,12 @@ export class VoiceEditorController implements vscode.Disposable,vscode.TextDocum
  }
  get pendingId():string|undefined{return this.session?.id;}
  get pendingState():string|undefined{return this.session?.state;}
- private contexts():void{const s=this.session;for(const [key,value]of Object.entries({sessionActive:!!s||this.hotkeyMode==='ask'&&['arming','recording','processing'].includes(this.workspace.state??''),recording:s?.state==='arming'||s?.state==='recording'||this.workspace.state==='arming'||this.workspace.state==='recording',canApply:!s&&!this.starting&&!this.reviews.busy&&(this.reviews.snapshot(this.reviewEditor()?.document).pending_changes??0)>0,needsClarification:s?.state==='clarify'}))void vscode.commands.executeCommand('setContext','sharpvoice.'+key,value);}
+ private contexts():void{const s=this.session;for(const [key,value]of Object.entries({sessionActive:!!s||this.starting||['arming','recording','processing'].includes(this.workspace.state??''),recording:s?.state==='arming'||s?.state==='recording'||this.workspace.state==='arming'||this.workspace.state==='recording',canApply:!s&&!this.starting&&!this.reviews.busy&&(this.reviews.snapshot(this.reviewEditor()?.document).pending_changes??0)>0,needsClarification:s?.state==='clarify'}))void vscode.commands.executeCommand('setContext','sharpvoice.'+key,value);}
  private display(text:string,command='sharpvoice.cancel'):void{this.contexts();this.status.text='$(mic) '+text;this.status.command=command;this.status.tooltip='SharpVoice · '+text;this.status.show();this.publish({...this.workspace,type:'workspace',sequence:undefined,state:this.session?.state??'idle',message:text,result:this.session?.result});}
  private eligible(editor:vscode.TextEditor|undefined):asserts editor is vscode.TextEditor {
   if(process.platform!=='win32'||vscode.env.remoteName||!vscode.workspace.isTrusted||!this.focused()||!editor||editor.document.isClosed||editor.selections.length!==1||!['file','untitled'].includes(editor.document.uri.scheme)||vscode.workspace.fs.isWritableFileSystem(editor.document.uri.scheme)===false)throw new Error('Use one cursor in a local editable file in trusted Windows VS Code.');
  }
- async start(mode:string,instruction?:string,panelEpoch?:number,hotkeyId?:string):Promise<void>{
+ async start(mode:string,instruction?:string,panelEpoch=this.panelEpoch,hotkeyId?:string):Promise<void>{
   const pending=()=>this.disposed||panelEpoch!==undefined&&panelEpoch!==this.panelEpoch||hotkeyId!==undefined&&this.hotkeyRequest!==hotkeyId;
   if(this.starting)return;if(this.reviews.busy)throw new Error('Finish the current document change first.');
   if(this.session){if(['arming','recording'].includes(this.session.state)&&this.session.mode===mode){this.stop();return;}throw new Error('Finish or cancel the current voice request first.');}
@@ -250,7 +250,7 @@ export class VoiceEditorController implements vscode.Disposable,vscode.TextDocum
   let customExpanded=false;const initialEditor=vscode.window.activeTextEditor??this.source;
   if(instruction&&initialEditor){const expanded=this.project.expandShortcut(instruction,initialEditor.document);if(expanded){instruction=expanded;customExpanded=true;this.workflowStatus('Custom shortcut: '+expanded.slice(0,160));}}
   if(instruction&&instruction.length>4000)throw new Error('Code instruction exceeds 4,000 characters. Shorten the custom shortcut.');
-  this.starting=true;
+  this.starting=true;this.display('Preparing Request · Click to Cancel');
   try{
    let editor=hotkeyId?vscode.window.activeTextEditor:vscode.window.activeTextEditor??this.source;this.eligible(editor);
    this.reviews.assertAvailable(editor.document);const initialSelection=editor.selection,version=editor.document.version;
@@ -272,11 +272,11 @@ export class VoiceEditorController implements vscode.Disposable,vscode.TextDocum
    const id=hotkeyId??randomUUID();const timer=setTimeout(()=>this.cancel('Voice edit expired. Start a new request.'),300000);
    this.session={id,mode,snapshot,initial,shortcut,context,editor,range,state:instruction?'processing':'arming',rounds:0,timer,applying:false,beforeProblems:this.problemCounts(document),retainedContext:retained,relatedVersions:this.contextGuards.get(context)};
    if(!instruction)this.awaitReady(this.session);this.channel.send({type:'start',id,mode,context,instruction,workspace:this.workspaceKey(),state:hotkeyId?'hotkey':customExpanded?'expanded':undefined});this.display(instruction?'Working · Click to Cancel':'Starting Microphone · Click to Cancel','sharpvoice.cancel');
-  }finally{this.starting=false;this.contexts();}
+   }finally{this.starting=false;if(this.session)this.contexts();else this.refreshReview();}
  }
  private awaitReady(s:Session):void{clearTimeout(s.readyTimer);s.readyTimer=setTimeout(()=>{if(this.session===s&&s.state==='arming')this.fail(new Error('SharpVoice did not confirm microphone readiness. Check the desktop app, then retry.'));},15000);}
  stop():void{const s=this.session;if(!s&&['arming','recording'].includes(this.workspace.state??'')){this.channel.send({type:this.workspace.state==='arming'?'workspace_cancel':'workspace_stop'});return;}if(s?.state==='arming'){this.cancel();return;}if(s?.state!=='recording')return;s.state='processing';this.channel.send({type:'stop',id:s.id});this.display('Working · Click to Cancel');}
- cancel(message?:string):void{if(this.queue){this.queue.cancelled=true;if(!this.session?.applying)this.queue.reject?.(new Error(message??'Canceled'));}this.panelEpoch++;const s=this.session;if(s?.applying)return;if(!s){if(this.hotkeyMode==='ask'){this.hotkeyRequest=undefined;this.hotkeyMode=undefined;clearTimeout(this.askReadyTimer);try{this.channel.send({type:'workspace_cancel'});}catch{}}return;}try{this.channel.send({type:'cancel',id:s.id});}catch{}this.clear();if(message)void vscode.window.showWarningMessage(message);}
+ cancel(message?:string):void{if(this.queue){this.queue.cancelled=true;if(!this.session?.applying)this.queue.reject?.(new Error(message??'Canceled'));}this.panelEpoch++;const s=this.session;if(s?.applying)return;if(!s){this.hotkeyRequest=undefined;this.hotkeyMode=undefined;clearTimeout(this.askReadyTimer);try{this.channel.send({type:'workspace_cancel'});}catch{}return;}try{this.channel.send({type:'cancel',id:s.id});}catch{}this.clear();if(message)void vscode.window.showWarningMessage(message);}
  private current(s:Session):boolean{
   const document=s.editor.document;
   if(!this.guardsCurrent(s.relatedVersions))return false;
@@ -299,7 +299,8 @@ export class VoiceEditorController implements vscode.Disposable,vscode.TextDocum
    if(id===this.hotkeyRequest)return;
    try{
     if(typeof id!=='string'||id.length<1||id.length>128||!['dictate','ask'].includes(frame.mode??''))throw new Error('Invalid desktop voice shortcut request.');
-    if(!this.focused()||this.session||this.starting||this.queue)throw new Error('Focus the editor and finish the current voice operation first.');
+    if(!this.focused()||this.session||this.starting||this.queue||['arming','recording','processing'].includes(this.workspace.state??''))throw new Error('Focus the editor and finish the current voice operation first.');
+    if(!vscode.window.activeTextEditor){this.channel.send({type:'hotkey_fallback',id,mode:frame.mode,state:'no_editor'});return;}
     this.hotkeyRequest=id;this.hotkeyMode=frame.mode;
     if(frame.mode==='ask'){this.askStarted=false;await this.startAskHotkey(id);return;}
     await this.start('dictate',undefined,undefined,id);
@@ -327,7 +328,10 @@ export class VoiceEditorController implements vscode.Disposable,vscode.TextDocum
     if(rejection){this.rejectEdit(rejection);return;}
     const target=shortcutTarget(s.initial,shortcut,vscode.workspace.getConfiguration('sharpvoice').get<string>('context','nearby'));
     const scoped=target??captureTarget({...s.initial,end:s.initial.start},'selection','dictate');
-    s.shortcut=shortcut;s.snapshot=scoped.snapshot;s.context=await this.augment(scoped.context,s.editor.document,s.retainedContext);
+    const context=await this.augment(scoped.context,s.editor.document,s.retainedContext);
+    if(this.session!==s)return;
+    if(!this.current(s)||!this.guardsCurrent(this.contextGuards.get(context))){this.cancel('Context changed before generation.');return;}
+    s.shortcut=shortcut;s.snapshot=scoped.snapshot;s.context=context;s.relatedVersions=this.contextGuards.get(context);
     s.range=new vscode.Range(s.editor.document.positionAt(s.snapshot.start),s.editor.document.positionAt(s.snapshot.end));
     this.channel.send({type:'validated',id:s.id,message:frame.message,context:s.context,state:target?'shortcut':'noop'});return;
    }
@@ -338,7 +342,10 @@ export class VoiceEditorController implements vscode.Disposable,vscode.TextDocum
     const target=captureTarget({...s.snapshot,start:s.editor.document.offsetAt(selection.start),end:s.editor.document.offsetAt(selection.end)},vscode.workspace.getConfiguration('sharpvoice').get<string>('context','nearby'),s.mode);
     s.snapshot=target.snapshot;s.context=target.context;s.range=new vscode.Range(s.editor.document.positionAt(s.snapshot.start),s.editor.document.positionAt(s.snapshot.end));
    }
-   s.context=await this.augment(s.context,s.editor.document,s.retainedContext);if(!this.current(s)){this.cancel('Context changed before generation.');return;}
+   const context=await this.augment(s.context,s.editor.document,s.retainedContext);
+   if(this.session!==s)return;
+   if(!this.current(s)||!this.guardsCurrent(this.contextGuards.get(context))){this.cancel('Context changed before generation.');return;}
+   s.context=context;s.relatedVersions=this.contextGuards.get(context);
    this.channel.send({type:'validated',id:s.id,message:frame.message,context:s.context,instruction:expanded});return;
   }
   if(frame.type==='status'){
@@ -436,7 +443,7 @@ export class VoiceEditorController implements vscode.Disposable,vscode.TextDocum
  }
  private publish(frame:Frame):void{
   if(frame.type!=='workspace'){this.panel?.update(frame);return;}
-  const state=this.session?.state??(this.queue?'processing':['review','applying'].includes(frame.state??'')?'idle':frame.state);
+  const state=this.session?.state??(this.starting?'opening':this.queue?'processing':['review','applying'].includes(frame.state??'')?'idle':frame.state);
   this.panel?.update({...frame,project_files:this.projectFiles,verification:this.verification,...this.reviews.snapshot(this.reviewEditor()?.document),state,result:this.session?.result??frame.result,follow_up:this.question()});
  }
  private refreshReview():void{
@@ -472,7 +479,10 @@ export class VoiceEditorController implements vscode.Disposable,vscode.TextDocum
   const source=await vscode.window.showTextDocument(s.editor.document,{preview:false,preserveFocus:false,viewColumn:s.editor.viewColumn});
   if(this.session!==s)return;s.editor=source;
   if(!this.current(s)||++s.rounds>3){this.cancel('Clarification expired or document changed. Start again.');return;}
-  s.snapshot=target.snapshot;s.context=await this.augment(target.context,s.editor.document,s.retainedContext);s.range=range;
+  const context=await this.augment(target.context,s.editor.document,s.retainedContext);
+  if(this.session!==s)return;
+  if(!this.current(s)||!this.guardsCurrent(this.contextGuards.get(context))){this.cancel('Clarification expired or document changed. Start again.');return;}
+  s.snapshot=target.snapshot;s.context=context;s.range=range;s.relatedVersions=this.contextGuards.get(context);
   s.state=answer?'processing':'arming';
   if(!answer)this.awaitReady(s);
   this.channel.send({type:'clarify',id:s.id,instruction:answer,context:s.context});this.display(answer?'Working · Click to Cancel':'Starting Microphone · Click to Cancel','sharpvoice.cancel');

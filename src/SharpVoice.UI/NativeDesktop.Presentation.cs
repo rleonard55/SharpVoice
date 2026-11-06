@@ -65,6 +65,12 @@ public sealed partial class NativeDesktop
             Win32.DwmSetWindowAttribute(settingsWindow, 19, in dark, 4);
         foreach (var control in pages.SelectMany(x => x).Concat(fields.Values).Concat(toolControls).Concat(answerControls).Concat(connectedControls).Concat(setupControls).Distinct())
             Win32.SetWindowTheme(control, theme.Dark ? "DarkMode_Explorer" : "Explorer", null);
+        if (setupMeter != 0)
+        {
+            Win32.SetWindowTheme(setupMeter, "", "");
+            Win32.SendMessageW(setupMeter, 0x2001, 0, (nint)theme.Field);
+            Win32.SendMessageW(setupMeter, 0x409, 0, (nint)theme.Success);
+        }
         Win32.SetWindowTheme(tabControl, "", "");
         Win32.SetWindowTheme(inputMeter, "", "");
         Win32.SetWindowTheme(localDownloadBar, "", "");
@@ -90,7 +96,7 @@ public sealed partial class NativeDesktop
         Win32.DrawTextW(dc, text, -1, ref rect, flags);
         Win32.SelectObject(dc, old);
     }
-    private static readonly string[] SettingsTabIcons = ["\uE720", "\uE8F1", "\uE70F", "\uE765", "\uE77F", "\uE713"];
+    private static readonly string[] SettingsTabIcons = ["\uE767", "\uE8F1", "\uE70F", "\uE765", "\uE77F", "\uE713"];
     private string? SettingsActionIcon(uint id) => id switch
     {
         101 => "\uE73E", // Apply
@@ -139,6 +145,7 @@ public sealed partial class NativeDesktop
         4805 => "\uE765",
         4806 => "\uE8F1",
         4807 => "\uE720",
+        4809 => "\uE894",
         _ => null
     };
     private void DrawIconLabel(nint dc, string text, string? glyph, Win32.Rect rect, uint color, uint? iconColor = null)
@@ -216,15 +223,31 @@ public sealed partial class NativeDesktop
                 PaintSettingsHeader((nint)wParam);
                 var audioPage = tabControl != 0 && Win32.SendMessageW(tabControl, 0x130B, 0, 0) == 0;
                 var card = new Win32.Rect { Left = 24, Top = 186, Right = 704, Bottom = audioPage ? 470 : 544 };
-                Rounded((nint)wParam, card, surfaceBrush, 16);
+                if (!audioPage) PaintCard((nint)wParam, card, (int)Win32.SendMessageW(tabControl, 0x130B, 0, 0));
+                else
+                {
+                    PaintCard((nint)wParam, new Win32.Rect { Left = 24, Top = 186, Right = 704, Bottom = 278 }, 0);
+                    PaintCard((nint)wParam, new Win32.Rect { Left = 24, Top = 282, Right = 704, Bottom = 334 }, 0);
+                    PaintCard((nint)wParam, new Win32.Rect { Left = 24, Top = 342, Right = 704, Bottom = 470 }, 0);
+                }
                 if (audioPage)
                 {
                     var input = new Win32.Rect { Left = 40, Top = 342, Right = 675, Bottom = 460 };
-                    Rounded((nint)wParam, input, borderBrush, 10);
-                    input.Left++; input.Right--; input.Top++; input.Bottom--; Rounded((nint)wParam, input, surfaceBrush, 8);
+
                     var line = new Win32.Rect { Left = 54, Top = 414, Right = 661, Bottom = 415 };
                     Win32.FillRect((nint)wParam, in line, borderBrush);
                 }
+            }
+            if (hwnd == setupWindow) PaintSetup((nint)wParam);
+            if (hwnd == toolsWindow)
+            {
+                if (toolsKind == "updates")
+                {
+                    PaintCard((nint)wParam, new Win32.Rect { Left = 24, Top = 108, Right = 680, Bottom = 276 }, 1);
+                    PaintCard((nint)wParam, new Win32.Rect { Left = 24, Top = 292, Right = 680, Bottom = 422 }, 5);
+                }
+                var divider = new Win32.Rect { Left = 24, Top = 98, Right = toolsKind == "updates" ? 680 : 814, Bottom = 99 };
+                Win32.FillRect((nint)wParam, in divider, borderBrush);
             }
             result = 1; return true;
         }
@@ -238,7 +261,7 @@ public sealed partial class NativeDesktop
         if (message != 0x2B || lParam == 0) return false; // WM_DRAWITEM
         var draw = (Win32.DrawItem*)lParam;
         var box = draw->Rect;
-        if (draw->Type == 5 && DrawHeaderControl(draw)) { result = 1; return true; }
+        if (draw->Type == 5 && (DrawHeaderControl(draw) || DrawSetupStep(draw))) { result = 1; return true; }
         if (draw->Type == 3)
         {
             var selected = (draw->State & 1) != 0;
@@ -275,7 +298,7 @@ public sealed partial class NativeDesktop
         }
         if (draw->Type == 4)
         {
-            Win32.FillRect(draw->Dc, in box, pages.Any(page => page.Contains(draw->Window)) ? surfaceBrush : background);
+            Win32.FillRect(draw->Dc, in box, (pages.Any(page => page.Contains(draw->Window)) || setupPageControls.Contains(draw->Window) || (toolsKind == "updates" && updateCardControls.Contains(draw->Window))) ? surfaceBrush : background);
             var hot = ControlIsHovered(draw->Window) && (draw->State & 4) == 0;
             if (helpEntries.ContainsKey((int)draw->Id))
             {
@@ -284,10 +307,11 @@ public sealed partial class NativeDesktop
                 if ((draw->State & 0x10) != 0) Win32.DrawFocusRect(draw->Dc, in box);
                 result = 1; return true;
             }
-            var primary = draw->Id is 101 or 4803;
+            var enabled = (draw->State & 4) == 0;
+            var primary = draw->Id is 101 or 4803 or 4702;
             var pressed = (draw->State & 1) != 0;
-            Rounded(draw->Dc, box, primary ? hot ? accentHover : accent : hot ? accent : borderBrush, 10);
-            if (!primary) { box.Left++; box.Right--; box.Top++; box.Bottom--; Rounded(draw->Dc, box, pressed || hot ? selectionBrush : inputBackground, 8); }
+            Rounded(draw->Dc, box, !enabled ? borderBrush : primary ? hot ? accentHover : accent : hot ? accent : borderBrush, 12);
+            if (!primary || !enabled) { box.Left++; box.Right--; box.Top++; box.Bottom--; Rounded(draw->Dc, box, pressed || hot ? selectionBrush : inputBackground, 8); }
             DrawIconLabel(draw->Dc, Text(draw->Window), SettingsActionIcon(draw->Id), box, (draw->State & 4) != 0 ? theme.Muted : primary ? theme.AccentText : theme.Text);
             if ((draw->State & 0x10) != 0)
             {

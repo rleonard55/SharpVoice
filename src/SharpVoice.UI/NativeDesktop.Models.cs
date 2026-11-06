@@ -152,5 +152,10 @@ public sealed partial class NativeDesktop
         RefreshConnectionTestControls();
     }
 
-    private void RequestModelsRefresh() => ModelsRefreshRequested?.Invoke(SelectedChoice("Backend"));
+    private void RequestModelsRefresh()
+    {
+        var backend = SelectedChoice("Backend");
+        if (backend == "chatgpt_oauth" && AccountSignedIn(backend) && IsAuthenticationBusy?.Invoke() != true)
+            ModelsRefreshRequested?.Invoke(backend);
+    }
 }

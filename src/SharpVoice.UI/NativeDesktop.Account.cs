@@ -17,8 +17,8 @@ public sealed partial class NativeDesktop
         try
         {
             StyleMenu(menu);
-            AddMenu(menu, 201, backend == "gemini_antigravity" ? "Open Google sign-in" : "Sign in again");
-            AddMenu(menu, 202, backend == "gemini_antigravity" ? "Sign out in Antigravity" : "Sign out");
+            AddMenu(menu, 201, backend == "gemini_antigravity" ? "Open Google Sign-In" : "Re-Authenticate");
+            AddMenu(menu, 202, backend == "gemini_antigravity" ? "Sign Out In Antigravity" : "Sign Out");
             var command = Win32.TrackPopupMenu(menu, 0x102, rect.Left, rect.Bottom + 4, 0, settingsWindow, 0);
             Win32.PostMessageW(settingsWindow, 0, 0, 0);
             if (command == 201) RequestAuthentication(ChatGptAccountAction.Reconnect, backend);

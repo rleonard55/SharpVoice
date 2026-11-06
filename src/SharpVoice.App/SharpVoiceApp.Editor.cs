@@ -52,6 +52,11 @@ internal sealed partial class SharpVoiceApp
             {
                 ct.ThrowIfCancellationRequested(); lifetime.Token.ThrowIfCancellationRequested();
                 LastUpdateActivity = Environment.TickCount64;
+                if (frame.Type == "hotkey_fallback")
+                {
+                    AcceptDesktopHotkeyFallback(frame);
+                    completion.TrySetResult(new("ack", frame.Id)); return;
+                }
                 if (frame.Type == "hotkey_error")
                 {
                     if (editorHotkey.Pending && frame.Id == editorHotkey.Id && frame.ClientId == editorHotkeyClient)
@@ -72,6 +77,7 @@ internal sealed partial class SharpVoiceApp
                     var window = environment.CaptureTarget();
                     if (!EditorPlugins.IsSupportedEditor(window.ProcessName)) throw new InvalidOperationException("Focus a local VS Code or Antigravity source editor first.");
                     var effective = WritingTools.Resolve(config, window.ProcessName);
+                    if (fromHotkey && effective.Backend == "none") throw new InvalidOperationException("Editor code dictation needs an AI provider. Choose one in AI & Models or this editor's App Profile.");
                     if (effective.Backend == "none" && frame.Instruction is not null && EditorShortcuts.Match(frame.Instruction) is not ("comment" or "uncomment" or "format")) throw new InvalidOperationException("Choose an AI provider in SharpVoice AI & Models or this editor's app profile first.");
                     if (frame.Instruction is null && !microphoneReady || frame.Context is null) throw new InvalidOperationException("Editor context or microphone is unavailable.");
                     editorSession.Start(frame.Id, frame.Mode ?? "", frame.Context, DateTimeOffset.UtcNow); editorCustomExpanded = frame.State == "expanded"; editorWindow = window;
@@ -139,7 +145,8 @@ internal sealed partial class SharpVoiceApp
             {
                 if (frame.Type == "workspace_voice" && frame.State == "hotkey" && editorHotkey.Id == frame.Id && frame.ClientId == editorHotkeyClient && !previousWorkspaceAsking)
                 { if (workspaceAsking) CancelWorkspaceRequest(); else CancelEditorHotkey(); desktop.ResetRecordingGesture(); }
-                if (frame.Id == editorHotkey.Id && (editorHotkey.Pending || previousEditorRequest is null && !workspaceAsking)) CancelEditorHotkey();
+                if (frame.Id == editorHotkey.Id && (editorHotkey.Pending || previousEditorRequest is null && !workspaceAsking))
+                { CancelEditorHotkey(); desktop.ResetRecordingGesture(); }
                 if (editorSession.Busy && editorSession.Id == frame.Id && (frame.Type == "clarify" || frame.Type == "start" && previousEditorRequest is null)) Cancel();
                 completion.TrySetException(ex);
             }

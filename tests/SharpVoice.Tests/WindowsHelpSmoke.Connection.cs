@@ -36,6 +36,24 @@ internal static partial class WindowsHelpSmoke
             for (var i = 0; i < 30 && !condition(); i++) Pump();
             Check(condition(), "Connection UI completion did not arrive.");
         }
+        var oldChat = desktop.IsChatGptSignedIn; var oldClaude = desktop.IsClaudeSignedIn;
+        var oldKey = desktop.HasGeminiApiKey; var oldLocal = desktop.IsLocalModelPresent;
+        var ready = false; var readinessCalls = 0;
+        desktop.IsChatGptSignedIn = () => ready; desktop.IsClaudeSignedIn = () => ready;
+        desktop.HasGeminiApiKey = () => ready; desktop.IsLocalModelPresent = _ => ready;
+        desktop.ConnectionTestRequested = (_, _, _) => { readinessCalls++; return Task.FromResult(new ConnectionTestResult("fixture-ready", TimeSpan.Zero)); };
+        Page(1);
+        foreach (var provider in new[] { 1, 3, 5, 2 })
+        {
+            ready = false; Provider(provider); desktop.RefreshAuthentication();
+            Check(UpdateControlEnabled(Item(112)) == 0, "Unready provider must disable Test Connection.");
+            var count = readinessCalls; Click();
+            Check(readinessCalls == count, "A direct command bypassed provider readiness.");
+            ready = true; desktop.RefreshAuthentication();
+            Check(UpdateControlEnabled(Item(112)) != 0, "Ready provider did not enable Test Connection.");
+            Click(); Wait(() => Text(1025).Contains("Connected"));
+            Check(readinessCalls == count + 1, "Ready transition did not allow exactly one test.");
+        }
         Page(1); Provider(1); Model("unsaved-draft-model");
         var calls = 0; var selected = ""; var model = "";
         CancellationToken token = default;
@@ -48,7 +66,9 @@ internal static partial class WindowsHelpSmoke
         Win32.SendMessageW(Item(112), 0x101, 13, 0);
         Check(calls == 1 && selected == "chatgpt_oauth" && model == "unsaved-draft-model" && token.CanBeCanceled, "Test ignored the draft selection or tried to apply unrelated preferences.");
         Check(Text(112) == "Cancel Test" && Text(1025).Contains("Testing"), "Pending test is not visible/cancellable.");
-        Click(); Click();
+        ready = false; desktop.RefreshAuthentication();
+        Check(UpdateControlEnabled(Item(112)) != 0, "Loss of readiness must retain Cancel Test for active work.");
+        Click(); Click(); ready = true; desktop.RefreshAuthentication();
         Check(token.IsCancellationRequested && calls == 1, "Cancel or duplicate click started another request.");
         pending.SetResult(new("stale-canceled-model", TimeSpan.FromSeconds(1)));
         Wait(() => Text(112) == "Test Connection");
@@ -111,6 +131,9 @@ internal static partial class WindowsHelpSmoke
         Provider(0); Check(Win32.IsWindowVisible(Item(112)) == 0, "Transcription-only mode offers an LLM test.");
         Win32.SetWindowTextW(Item(1021), "8");
         Provider(1);
+        desktop.IsChatGptSignedIn = oldChat; desktop.IsClaudeSignedIn = oldClaude;
+        desktop.HasGeminiApiKey = oldKey; desktop.IsLocalModelPresent = oldLocal;
+        desktop.RefreshAuthentication();
         Console.WriteLine("PASS native tab hover and connection-test draft routing, cancellation, stale results, model/time, failures and both themes.");
     }
 }

@@ -63,9 +63,9 @@ internal static unsafe partial class WindowsSettingsSnapshot
                 var origin = new Win32.Point(); ClientToScreen(window, &origin);
                 var clientX = origin.X - frameLeft; var clientY = origin.Y - frameTop;
                 uint Pixel(int x, int y) => GetPixel(dc, clientX + x, clientY + y);
-                if (Pixel(36, 16) == Pixel(680, 16)) throw new Exception("Brand header is flat; blue-to-indigo gradient is missing.");
-                if (Pixel(680, 25) == Pixel(680, 80)) throw new Exception("Brand header curved accent is missing.");
-                if (Pixel(620, 19) != Pixel(620, 21) || Pixel(620, 61) != Pixel(620, 63)) throw new Exception("Header text controls cover the graphic with solid rectangles.");
+                if (Pixel(40, 40) != palette.Accent) throw new Exception("Compact brand icon is missing its Indigo surface.");
+                if (Pixel(620, 25) != palette.Background || Pixel(620, 80) != palette.Background)
+                    throw new Exception("The compact header must keep its light, uncluttered background.");
             }
             CheckHeaderGraphic();
             if (levelDb.HasValue && gateDb.HasValue && page == 0)

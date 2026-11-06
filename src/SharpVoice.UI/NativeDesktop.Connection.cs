@@ -16,6 +16,16 @@ public sealed partial class NativeDesktop
     private bool connectionCancelling;
     private int connectionResultState;
 
+    private bool ProviderReadyForTest(string backend) => backend switch
+    {
+        "chatgpt_oauth" => IsChatGptSignedIn?.Invoke() == true,
+        "claude_code" => IsClaudeSignedIn?.Invoke() == true,
+        "gemini_api" => HasGeminiApiKey?.Invoke() == true,
+        "embedded" => IsLocalModelPresent?.Invoke(SelectedModelId()) == true,
+        // Antigravity owns its account state; its CLI test is how we discover readiness.
+        "gemini_antigravity" => true,
+        _ => false
+    };
     private void RefreshConnectionTestControls()
     {
         if (connectionTestButton == 0) return;
@@ -24,10 +34,14 @@ public sealed partial class NativeDesktop
         var authBusy = IsAuthenticationBusy?.Invoke() == true;
         if ((connectionBackend.Length != 0 && (connectionBackend != backend || connectionModel != SelectedModelId())) || authBusy || active)
             CancelConnectionTestCore(clearResult: true);
-        Win32.ShowWindow(connectionTestButton, Win32.SendMessageW(tabControl, 0x130B, 0, 0) == 1 && backend != "none" ? 5 : 0);
-        Win32.EnableWindow(connectionTestButton, !active && !authBusy && !connectionCancelling && localDownloadCancellation is null && ConnectionTestRequested is not null ? 1 : 0);
+        var visible = Win32.SendMessageW(tabControl, 0x130B, 0, 0) == 1 && backend != "none";
+        Win32.ShowWindow(connectionTestButton, visible ? 5 : 0);
+        if (helpEntries.TryGetValue(2112, out var help)) Win32.ShowWindow(help.Button, visible ? 5 : 0);
+        Win32.EnableWindow(connectionTestButton, !active && !authBusy && !connectionCancelling && localDownloadCancellation is null && ConnectionTestRequested is not null && (connectionCancellation is not null || ProviderReadyForTest(backend)) ? 1 : 0);
         Win32.SetWindowTextW(connectionTestButton, connectionCancellation is null ? "Test Connection" : connectionCancelling ? "Canceling Test…" : "Cancel Test");
-        Win32.SetWindowTextW(connectionStatus, connectionMessage);
+        var guidance = backend == "embedded" ? "Download the selected model before testing."
+            : backend == "gemini_api" ? "Add an API key before testing." : "Sign in before testing the connection.";
+        Win32.SetWindowTextW(connectionStatus, connectionMessage.Length == 0 && backend != "none" && !ProviderReadyForTest(backend) ? guidance : connectionMessage);
         Win32.InvalidateRect(connectionStatus, 0, 1);
         RefreshLocalDownloadControls();
     }
@@ -67,7 +81,7 @@ public sealed partial class NativeDesktop
         }
         var backend = SelectedChoice("Backend");
         var model = SelectedModelId();
-        if (backend == "none") return;
+        if (!ProviderReadyForTest(backend)) { RefreshConnectionTestControls(); return; }
         connectionBackend = backend; connectionModel = model;
         connectionMessage = "Testing Connection…"; connectionResultState = 0;
         var request = ++connectionGeneration;

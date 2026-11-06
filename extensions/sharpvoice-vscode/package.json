@@ -2,7 +2,7 @@
   "name": "sharpvoice-vscode",
   "displayName": "SharpVoice",
   "description": "Document-aware voice coding with inline working-file changes and batch review.",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "publisher": "sharpvoice",
   "license": "MIT",
   "engines": {

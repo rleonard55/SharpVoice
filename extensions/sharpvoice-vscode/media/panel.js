@@ -19,8 +19,8 @@ function render(snapshot,live){const changedHost=current.host_id&&current.host_i
  el('recovery').hidden=!(snapshot.recovery_available>0);
  el('changes').replaceChildren();el('changeList').hidden=!(snapshot.review_items?.length);
  for(const item of snapshot.review_items??[]){const row=document.createElement('section');row.className='change';
-  const jump=document.createElement('button');jump.textContent=`${item.file}:${item.line} · ${item.conflicted?'Manual conflict · ':''}${item.preview}`;jump.disabled=busy;jump.addEventListener('click',()=>send({action:'jumpChange',id:item.id}));row.appendChild(jump);
-  for(const action of ['acceptChange','revertChange']){const button=document.createElement('button');button.textContent=action==='acceptChange'?'Accept':'Revert';button.disabled=busy||action==='revertChange'&&item.conflicted;button.addEventListener('click',()=>send({action,id:item.id}));row.appendChild(button);}el('changes').appendChild(row);
+  const jump=document.createElement('button');jump.textContent=`${item.file}:${item.line} · ${item.conflicted?'Manual conflict · ':''}${item.preview}`;jump.disabled=busy||state==='clarify';jump.addEventListener('click',()=>send({action:'jumpChange',id:item.id}));row.appendChild(jump);
+  for(const action of ['acceptChange','revertChange']){const button=document.createElement('button');button.textContent=action==='acceptChange'?'Accept':'Revert';button.disabled=busy||state==='clarify'||action==='revertChange'&&item.conflicted;button.addEventListener('click',()=>send({action,id:item.id}));row.appendChild(button);}el('changes').appendChild(row);
  }
  for(const id of ['fix','explainError','testThis','runTests','related','editRelated','shortcuts','explainChanges','acceptWorkspace','revertWorkspace','resume','discardRecovery','nextChange','previousChange'])el(id).disabled=busy||state==='clarify';
  el('conversations').replaceChildren();for(const c of snapshot.conversations??[]){const o=document.createElement('option');o.value=c.id;o.textContent=c.title;o.selected=c.id===snapshot.conversation?.id;el('conversations').appendChild(o);}
@@ -38,6 +38,8 @@ function render(snapshot,live){const changedHost=current.host_id&&current.host_i
  el('status').className=snapshot.follow_up?'needs-answer':state==='recording'?'recording-status':'';
  el('voice').textContent=state==='recording'?'Stop Recording':state==='arming'?'Cancel Recording':snapshot.follow_up?'Reply by Voice':'Speak';el('voice').disabled=busy&&!['arming','recording'].includes(state);el('send').disabled=busy;el('reply').disabled=busy;el('cancel').disabled=['idle','busy','applying'].includes(state);const pending=snapshot.pending_changes??0;el('pending').hidden=!pending;el('pending').textContent=pending?`${snapshot.review_file??'Current file'} · ${pending} pending change${pending===1?'':'s'}${snapshot.review_conflicts?' · '+snapshot.review_conflicts+' overlap manual edits':''}`:'';
  el('accept').hidden=!pending;el('revert').hidden=!pending;el('review').hidden=!pending;for(const id of ['accept','revert','review'])el(id).disabled=busy||state==='clarify';
- for(const id of ['mode','includeFile','conversations'])el(id).disabled=busy;
+ for(const id of ['mode','includeFile','conversations','new'])el(id).disabled=busy||state==='clarify';
+ el('delete').disabled=busy||state==='clarify'||!snapshot.conversation;el('clear').disabled=busy||state==='clarify'||!(snapshot.conversations?.length);
+ el('copy').disabled=!(snapshot.conversation?.turns??[]).some(turn=>turn.response);
 }
 window.addEventListener('message',event=>{if(event.data&&event.data.snapshot)render(event.data.snapshot,event.data.draft??'');});send({action:'ready'});

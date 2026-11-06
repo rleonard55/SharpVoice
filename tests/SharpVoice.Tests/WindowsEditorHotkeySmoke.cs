@@ -31,11 +31,15 @@ internal static partial class WindowsHelpSmoke
         var root = Path.Combine(Path.GetTempPath(), "sharpvoice-hotkey-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
-            var config = new AppConfig { Backend = "chatgpt_oauth", Hotkey = 0x77, RecordingGesture = gesture, LiveTranscription = false };
+            var editorProcess = gesture.StartsWith("antigravity-", StringComparison.Ordinal) ? "antigravity" : "code";
+            if (editorProcess == "antigravity") gesture = gesture["antigravity-".Length..];
+            var noAi = gesture == "toggle-no-ai";
+            if (noAi) gesture = "toggle";
+            var config = new AppConfig { Backend = noAi ? "none" : "chatgpt_oauth", Hotkey = 0x77, RecordingGesture = gesture, LiveTranscription = false };
             using var http = new HttpClient(new RejectNetwork()); using var auth = new ChatGptAuthManager(http);
             using var desktop = new NativeDesktop(config); desktop.Initialize(false, false, audioFeedback: false);
             using var drivers = new MicrophoneActivationChecks.Drivers();
-            var source = new WindowTarget(1, (uint)(Environment.ProcessId + 1), 1, "code");
+            var source = new WindowTarget(1, (uint)(Environment.ProcessId + 1), 1, editorProcess);
             var focused = source; var selections = 0; var inserted = 0;
             var discoveryPath = Path.Combine(root, "editor", "connection.json");
             var environment = new VoiceEnvironment
@@ -47,8 +51,16 @@ internal static partial class WindowsHelpSmoke
             };
             using var app = new SharpVoiceApp(config, desktop, http, auth, environment);
             app.Start(null); Wait(app.Preparation, 30); Until(() => app.IsMicrophoneReady && app.UpdateIdle, 10);
-            desktop.VoicePressed!(VoiceMode.Dictation); Pump(); desktop.VoicePressed!(VoiceMode.AskAi); Pump();
-            Check(drivers.Count == 0 && selections == 0 && inserted == 0, "Disconnected plugin fell through to native dictation/paste.");
+            var desktopCaptures = 0;
+            foreach (var mode in new[] { VoiceMode.Dictation, VoiceMode.AskAi }.Where(mode => !noAi || mode == VoiceMode.Dictation))
+            {
+                desktop.VoicePressed!(mode);
+                Until(() => selections > 0, 10);
+                var fallbackCapture = drivers.Next(); Wait(fallbackCapture, 5);
+                Check(drivers.Count == desktopCaptures + 1 && inserted == 0, "Disconnected editor did not start ordinary desktop voice capture.");
+                desktop.CancelRequested!(); Wait(fallbackCapture.Result.Closed.Task, 5); Until(() => app.UpdateIdle, 15);
+                desktopCaptures = drivers.Count; selections = 0;
+            }
             var discovery = JsonSerializer.Deserialize(File.ReadAllText(discoveryPath), EditorJsonContext.Default.EditorDiscovery)!;
             using var client = new NamedPipeClientStream(".", discovery.Pipe, PipeDirection.InOut, PipeOptions.Asynchronous);
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(150));
@@ -68,6 +80,65 @@ internal static partial class WindowsHelpSmoke
             var hello = Next("hello");
             void Send(EditorFrame frame) => Wait(wire.WriteAsync(frame with { HostId = hello.HostId, ClientId = hello.ClientId, Workspace = "fixture" }, deadline.Token), 5);
             Send(new("workspace_sync", "subscribed")); Next("ack", "subscribed");
+            foreach (var mode in new[] { VoiceMode.Dictation, VoiceMode.AskAi }.Where(mode => !noAi || mode == VoiceMode.Dictation))
+            {
+                var count = received.Count(f => f.Type == "hotkey_start");
+                desktop.VoicePressed!(mode); Until(() => received.Count(f => f.Type == "hotkey_start") > count, 5);
+                var fallback = received.Last(f => f.Type == "hotkey_start");
+                Send(new("hotkey_fallback", fallback.Id, Mode: fallback.Mode, State: "no_editor")); Next("ack", fallback.Id);
+                Until(() => selections > 0, 10); var nativeCapture = drivers.Next(); Wait(nativeCapture, 5);
+                Check(drivers.Count == desktopCaptures + 1, "No-editor response did not use native capture.");
+                Send(new("start", fallback.Id, Mode: "dictate", Context: EditorChecks.Context(), State: "hotkey")); Next("error", fallback.Id);
+                Check(!nativeCapture.Result.Closed.Task.IsCompleted, "Late editor start canceled desktop fallback.");
+                desktop.CancelRequested!(); Wait(nativeCapture.Result.Closed.Task, 5); Until(() => app.UpdateIdle, 15);
+                desktopCaptures = drivers.Count; selections = 0;
+                Send(new("hotkey_fallback", fallback.Id, Mode: fallback.Mode, State: "no_editor")); Next("ack", fallback.Id); Pump();
+                Check(drivers.Count == desktopCaptures && selections == 0, "Repeated fallback revived a finished gesture.");
+            }
+            foreach (var change in new[] { "release", "control", "window", "error" })
+            {
+                var count = received.Count(f => f.Type == "hotkey_start");
+                desktop.VoicePressed!(VoiceMode.Dictation); Until(() => received.Count(f => f.Type == "hotkey_start") > count, 5);
+                var rejected = received.Last(f => f.Type == "hotkey_start");
+                if (change == "release") desktop.Released!();
+                if (change == "control") focused = source with { Focus = 2 };
+                if (change == "window") focused = source with { Handle = 2 };
+                Send(new(change == "error" ? "hotkey_error" : "hotkey_fallback", rejected.Id, Mode: "dictate", State: "no_editor")); Next("ack", rejected.Id); Pump();
+                Check(drivers.Count == desktopCaptures && selections == 0, "Released, focus-changed or failed handoff fell back into capture.");
+                focused = source; Until(() => app.UpdateIdle, 5);
+            }
+            // Keep subsequent handoff-count checks independent of the fallback fixtures.
+            while (received.TryDequeue(out _)) { }
+
+            if (noAi)
+            {
+                // Use the real hook-owned router: app cancellation must reset its toggle latch.
+                // Reflection stays in this fixture; no test-only surface is added to the product.
+                using var hook = new GlobalKeyboardHook(config.Hotkey, config.AskHotkey, _ => { }, () => { }, toggle: true);
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                var field = typeof(NativeDesktop).GetField("hook", flags)!;
+                field.SetValue(desktop, hook);
+                try
+                {
+                    var hookRouter = (RecordingGestureRouter)typeof(GlobalKeyboardHook).GetField("gesture", flags)!.GetValue(hook)!;
+                    for (var attempt = 0; attempt < 2; attempt++)
+                    {
+                        var action = hookRouter.Process(new(DualHotkeyTransition.Pressed, VoiceMode.Dictation, false));
+                        Check(action.Transition == DualHotkeyTransition.Pressed, "Rejected code request left toggle latched and consumed the next press.");
+                        var count = received.Count(f => f.Type == "hotkey_start");
+                        desktop.VoicePressed!(action.Mode); Until(() => received.Count(f => f.Type == "hotkey_start") > count, 5);
+                        var rejected = received.Last(f => f.Type == "hotkey_start");
+                        Send(new("start", rejected.Id, Mode: "dictate", Context: EditorChecks.Context(), State: "hotkey")); Next("error", rejected.Id);
+                        hookRouter.Process(new(DualHotkeyTransition.Released, VoiceMode.Dictation, false));
+                        Check(drivers.Count == desktopCaptures && selections == 0, "Provider-free code rejection opened desktop capture.");
+                    }
+                }
+                finally { field.SetValue(desktop, null); }
+                deadline.Cancel(); client.Dispose(); Wait(reading, 5);
+                Console.WriteLine("PASS provider-free desktop fallback and rejected-code toggle retries.");
+                return;
+            }
+
             foreach (var (instruction, selected, expected) in new[] { ("Comment", true, "comment"), ("Uncomment!", true, "uncomment"), ("Comment.", false, "noop"), ("Uncomment", false, "noop"), ("Format", true, "format"), ("Format.", false, "format") })
             {
                 var shortcutId = Guid.NewGuid().ToString("N");
@@ -85,7 +156,7 @@ internal static partial class WindowsHelpSmoke
             desktop.VoicePressed!(VoiceMode.Dictation); var released = Next("hotkey_start");
             Check(released.Mode == "dictate" && !app.UpdateIdle, "Custom Dictation did not reserve the editor handoff.");
             desktop.Released!(); Next("hotkey_cancel", released.Id); Start(released); Next("error", released.Id);
-            Check(drivers.Count == 0 && inserted == 0, "Released handoff opened capture or inserted late.");
+            Check(drivers.Count == desktopCaptures && inserted == 0, "Released handoff opened capture or inserted late.");
             Until(() => app.UpdateIdle, 5);
             desktop.VoicePressed!(VoiceMode.Dictation); var stale = Next("hotkey_start", message: null);
             // Match the new request rather than the retained earlier frame.
@@ -93,12 +164,12 @@ internal static partial class WindowsHelpSmoke
             stale = received.Last(f => f.Type == "hotkey_start");
             focused = source with { Handle = 2, ProcessName = "notepad" }; Next("hotkey_cancel", stale.Id);
             Start(stale); Next("error", stale.Id); focused = source;
-            Check(drivers.Count == 0 && inserted == 0, "Focus change allowed a stale editor start.");
+            Check(drivers.Count == desktopCaptures && inserted == 0, "Focus change allowed a stale editor start.");
             if (gesture == "hold")
             {
                 desktop.VoicePressed!(VoiceMode.Dictation); Until(() => received.Count(f => f.Type == "hotkey_start") >= 3, 5);
                 var timed = received.Last(f => f.Type == "hotkey_start"); Next("hotkey_cancel", timed.Id); Start(timed); Next("error", timed.Id);
-                Check(drivers.Count == 0, "Expired handoff started capture.");
+                Check(drivers.Count == desktopCaptures, "Expired handoff started capture.");
             }
             var requestCount = received.Count(f => f.Type == "hotkey_start");
             var machine = new DualHotkeyStateMachine(config.Hotkey, config.AskHotkey); var router = new RecordingGestureRouter(gesture == "toggle");
@@ -110,7 +181,7 @@ internal static partial class WindowsHelpSmoke
             }
             Key(true); Until(() => received.Count(f => f.Type == "hotkey_start") > requestCount, 5);
             var accepted = received.Last(f => f.Type == "hotkey_start"); Start(accepted); Next("status", accepted.Id, "recording");
-            Check(selections == 0 && drivers.Count == 1, "Plugin session used clipboard selection or failed to capture audio.");
+            Check(selections == 0 && drivers.Count == desktopCaptures + 1, "Plugin session used clipboard selection or failed to capture audio.");
             var capture = drivers.Next(); Wait(capture, 5);
             var oldErrors = received.Count(f => f.Type == "error" && f.Id == released.Id);
             Start(released); Until(() => received.Count(f => f.Type == "error" && f.Id == released.Id) > oldErrors, 5);
@@ -135,7 +206,7 @@ internal static partial class WindowsHelpSmoke
             desktop.VoicePressed!(VoiceMode.AskAi); Until(() => received.Count(f => f.Type == "hotkey_start") > requestCount, 5);
             var releasedAsk = received.Last(f => f.Type == "hotkey_start"); Check(releasedAsk.Mode == "ask", "Ask shortcut was not sent to plugin.");
             desktop.Released!(); Next("hotkey_cancel", releasedAsk.Id); StartAsk(releasedAsk); Next("error", releasedAsk.Id);
-            Check(drivers.Count == 1 && selections == 0, "Released Ask handoff captured a selection or opened late.");
+            Check(drivers.Count == desktopCaptures + 1 && selections == 0, "Released Ask handoff captured a selection or opened late.");
             // A nested Ask chord replaces a pending Dictation without opening either microphone early.
             requestCount = received.Count(f => f.Type == "hotkey_start");
             desktop.VoicePressed!(VoiceMode.Dictation); Until(() => received.Count(f => f.Type == "hotkey_start") > requestCount, 5);

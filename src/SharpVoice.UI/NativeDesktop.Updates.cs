@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using SharpVoice.Core;
 using SharpVoice.Platform.Windows.Native;
 
@@ -5,6 +6,8 @@ namespace SharpVoice.UI;
 
 public sealed partial class NativeDesktop
 {
+    [LibraryImport("user32.dll", EntryPoint = "SetFocus")] private static partial nint FocusUpdateAction(nint control);
+    private readonly HashSet<nint> updateCardControls = [];
     private AppUpdateView updateView = new("Development", "Updates are starting…", Supported: false);
     public Action? UpdateCheckRequested { get; set; }
     public Action? UpdateDownloadRequested { get; set; }
@@ -38,29 +41,42 @@ public sealed partial class NativeDesktop
             + (view.ReadyVersion is null ? "" : "\r\nReady to Install: " + view.ReadyVersion));
         Win32.EnableWindow(Win32.GetDlgItem(toolsWindow, 4702), view.Supported && !view.Busy ? 1 : 0);
         Win32.EnableWindow(Win32.GetDlgItem(toolsWindow, 4703), view.Supported && !view.Busy && view.AvailableVersion is not null && view.ReadyVersion != view.AvailableVersion ? 1 : 0);
-        Win32.EnableWindow(Win32.GetDlgItem(toolsWindow, 4704), view.Supported && !view.Busy ? 1 : 0);
+        Win32.EnableWindow(Win32.GetDlgItem(toolsWindow, 4704), view.Supported && !view.Busy && (view.AvailableVersion is not null || view.ReadyVersion is not null) ? 1 : 0);
     }
     private void OpenUpdates()
     {
-        StartToolsWindow("updates", "SharpVoice · Updates");
+        StartToolsWindow("updates", "Updates");
+        updateCardControls.Clear();
+        SetWindowPos(toolsWindow, 0, 0, 0, 720, 670, 0x16);
+        SetWindowPos(toolsNotice, 0, 24, 58, 656, 42, 0x14);
         Win32.ShowWindow(toolsList, 0);
-        ToolCombo("AutomaticUpdates", "Automatic Updates", 104, ["On", "Off"]);
+        toolFields["UpdateStatus"] = ToolControl("STATIC", "", 0, 40, 128, 624, 66);
+        updateCardControls.Add(toolFields["UpdateStatus"]);
+        updateCardControls.Add(ToolButton("Check Now", 4702, 40, 220, 150));
+        updateCardControls.Add(ToolButton("Install And Restart", 4704, 204, 220, 238));
+        updateCardControls.Add(ToolButton("Download", 4703, 456, 220, 208));
+        PolicyChoice("AutomaticUpdates", "Automatic Updates", 310, ["On", "Off"]);
         Win32.SendMessageW(toolFields["AutomaticUpdates"], 0x14E, config.AutomaticUpdates ? 0u : 1u, 0);
-        ToolCombo("UpdateAction", "When an Update Is Found", 190,
-            ["Notify Only", "Download Automatically (Install Manually)", "Install When Idle (Automatic Restart)"]);
+        PolicyChoice("UpdateAction", "When Available", 368,
+            ["Notify Only", "Download Automatically", "Install When Idle"]);
         Win32.SendMessageW(toolFields["UpdateAction"], 0x14E, (nuint)Array.IndexOf(new[] { "notify", "download", "install" }, config.UpdateAction), 0);
-        toolFields["UpdateStatus"] = ToolControl("EDIT", "", 0x00A11844, 40, 298, 760, 108);
-        ToolButton("Update Details", 4705, 40, 420, 210);
-        toolFields["UpdateSummary"] = ToolControl("STATIC", "Updates from public GitHub Releases · rleonard55/SharpVoice\r\n\r\nAutomatic restart waits for idle. Restart clears memory-only conversations.", 0, 40, 474, 760, 112);
-        toolFields["UpdateDetails"] = ToolControl("EDIT", "Automatic checks run after startup and every six hours. Install When Idle waits for 60 quiet seconds and closed settings/review windows, including wake speech and recognition. Dictation, AI requests and spoken answers are never interrupted. Restart clears conversations kept only in memory.\r\n\r\nInstall and Restart checks if needed, downloads and verifies any missing update, then restarts after active work finishes. Off disables scheduled checks and automatic installation. Manual actions still work. Private repositories and draft releases are not visible to this public updater. Preferences, credentials and downloaded models are preserved through updates.", 0x00A11844, 40, 470, 760, 156);
+        ToolButton("Update Details", 4705, 40, 442, 210);
+        toolFields["UpdateSummary"] = ToolControl("STATIC", "Updates from GitHub · Installed IDE plugins update with SharpVoice.\r\nRestart waits for active work and clears memory-only conversations.", 0, 40, 490, 624, 76);
+        toolFields["UpdateDetails"] = ToolControl("EDIT", "Automatic checks run after startup and every six hours. Install When Idle waits for 60 quiet seconds and closed settings/review windows. Dictation, AI requests, spoken answers and plugin updates finish before restart.\r\n\r\nCheck Now finds an update. Install And Restart downloads and verifies it if needed. Off disables automatic updates; manual actions still work. Installed IDE plugins update with SharpVoice; reload open editors to activate them. Preferences, credentials and downloaded models are preserved. Restart clears memory-only conversations.", 0x00A11844, 40, 484, 624, 88);
         Win32.ShowWindow(toolFields["UpdateDetails"], 0);
-        ToolButton("Check for Updates", 4702, 40, 646, 230);
-        ToolButton("Download Update", 4703, 294, 646, 230);
-        ToolButton("Install and Restart", 4704, 548, 646, 250);
-        ToolButton("Save Changes", 4701, 40, 692, 180);
-        ToolButton("Close", 4205, 640, 692, 158);
+        ToolButton("Close", 4205, 40, 594, 158);
+        ToolButton("Save Changes", 4701, 484, 594, 180);
+        void PolicyChoice(string key, string label, int y, string[] options)
+        {
+            ToolCombo(key, label, y, options);
+            var caption = toolControls[^2];
+            SetWindowPos(caption, 0, 40, y + 5, 215, 24, 0x14);
+            SetWindowPos(toolFields[key], 0, 270, y, 394, 240, 0x14);
+            updateCardControls.Add(caption);
+        }
         SetUpdateView(updateView);
         FinishToolsWindow();
+        FocusUpdateAction(Win32.GetDlgItem(toolsWindow, 4702));
     }
     private void SaveUpdates()
     {

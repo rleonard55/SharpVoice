@@ -21,6 +21,7 @@ if (args is ["--editor-hotkey-check"]) { await EditorChecks.HotkeyHandoff(); awa
 if (args is ["--plugin-ask-check"]) { await AskAiChecks.CompletedPluginAnswers(); await AskAiChecks.StructuredQuestions(); await AskAiChecks.EditorContextRequests(); return 0; }
 if (args is ["--followup-check"]) { await FollowUpChecks.Contracts(); await FollowUpChecks.CanceledDelivery(); await AskAiChecks.StructuredQuestions(); await SuccessCueChecks.QuestionAsset(); return 0; }
 if (args is ["--answer-preferences-check"]) { await SmartAskChecks.AnswerPreferences(); return 0; }
+if (args is ["--plugin-auto-update-check"]) { await EditorPluginChecks.Install(); await EditorPluginChecks.Failures(); await EditorPluginChecks.AutomaticUpdates(); await EditorPluginChecks.AutomaticUpdateSerialization(); await EditorPluginChecks.AutomaticUpdateStamp(); await EditorPluginChecks.AutomaticUpdateCancellation(); Console.WriteLine("PASS automatic editor plugin eligibility, safe installation, failure isolation, serialization, version stamps and cancellation."); return 0; }
 if (args is ["--updates-check"]) { await ReleaseUpdateChecks.Preferences(); await ReleaseUpdateChecks.Policy(); await ReleaseUpdateChecks.Cancellation(); await ReleaseUpdateChecks.OneClickInstall(); return 0; }
 if (args is ["--windows-provider-diagnostics-smoke", var providerOutput]) { WindowsHelpSmoke.Run(providerOutput, diagnosticsOnly: true); return 0; }
 if (args is ["--provider-rejection-check"]) { await ProviderDiagnosticChecks.RejectionGuidance(); return 0; }
@@ -183,6 +184,7 @@ if (args.Length > 0 && args[0] == "--file")
 }
 if (args is ["--windows-plugin-install-smoke", var pluginEditorExe, var pluginProfile]) { await EditorPluginChecks.RealInstall(pluginEditorExe, pluginProfile); return 0; }
 if (args is ["--windows-editor-extension-smoke", var editorExe, var extensionRoot, var editorReport]) { WindowsEditorExtensionSmoke.Run(editorExe, extensionRoot, editorReport); return 0; }
+if (args is ["--windows-visual-menus", var menuOutput]) { WindowsHelpSmoke.CaptureMenus(menuOutput); return 0; }
 if (args is ["--windows-hud-snapshot", var hudOutput]) { WindowsHudSmoke.Run(hudOutput); return 0; }
 
 if (args is ["--windows-selection-smoke"]) { WindowsSelectionSmoke.Run(); return 0; }
@@ -288,6 +290,7 @@ if (args is ["--windows-device-smoke"])
     return 0;
 }
 
+if (args is ["--windows-usability-smoke", var usabilityScenario]) { WindowsHelpSmoke.RunUsability(usabilityScenario); return 0; }
 if (args is ["--windows-compact-audio-smoke"]) { WindowsHelpSmoke.RunCompactAudio(); return 0; }
 if (args is ["--windows-settings-smoke", var preset])
 {
@@ -933,6 +936,10 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Spoken answers visibly fall back and cancellation never speaks again", SmartAskChecks.SpeechFallback),
     ("Pending microphone startup preserves Ask promotion and hotkey release", SmartAskChecks.RecordingGate),
     ("Edge speech helper uses private stdin and bounded cancellable binary output", SmartAskChecks.SpeechProcess),
+    ("Automatic plugin updates preserve missing/current/newer installations", EditorPluginChecks.AutomaticUpdates),
+    ("Canceled plugin installations release their gate and retry", EditorPluginChecks.AutomaticUpdateCancellation),
+    ("Automatic and manual plugin installations serialize", EditorPluginChecks.AutomaticUpdateSerialization),
+    ("Plugin maintenance retries failures and skips completed app versions", EditorPluginChecks.AutomaticUpdateStamp),
     ("Bundled editor plugin installs with safe arguments and verified status", EditorPluginChecks.Install),
     ("Editor plugins reject missing editors, downgrade, failures and cancellation", EditorPluginChecks.Failures),
     ("Editor workspace binding clears document context across authenticated peers and workspaces", EditorBridgeChecks.Binding),

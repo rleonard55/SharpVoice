@@ -215,6 +215,7 @@ public sealed partial class NativeDesktop
         var id = (int)(wParam & 0xFFFF); var notification = wParam >> 16;
         try
         {
+            if (toolsKind == "connected" && notification == 0x300 && toolFields.TryGetValue("ConnectedPath", out var path) && lParam == path) { ConnectedPathChanged(); return true; }
             if (id == 4101 && notification == 1) { if (toolsKind == "plugins") RequestPlugin(install: false); else if (toolsKind == "connected") SelectConnectedTool(); else if (toolsKind == "history") SelectHistory(); else if (toolsKind is not ("smartask" or "diagnostics")) SelectRule(); }
             if (notification == 0) switch (id)
             {
@@ -236,9 +237,9 @@ public sealed partial class NativeDesktop
                 case 4475: if (toolsKind == "connected") ConnectedAccount(); break;
                 case 4451: if (toolsKind == "smartask") SaveSmartAsk(); break;
                 case 4701: if (toolsKind == "updates") SaveUpdates(); break;
-                case 4702: if (toolsKind == "updates") UpdateCheckRequested?.Invoke(); break;
-                case 4703: if (toolsKind == "updates") UpdateDownloadRequested?.Invoke(); break;
-                case 4704: if (toolsKind == "updates") UpdateInstallRequested?.Invoke(); break;
+                case 4702: if (toolsKind == "updates" && updateView.Supported && !updateView.Busy) UpdateCheckRequested?.Invoke(); break;
+                case 4703: if (toolsKind == "updates" && updateView.Supported && !updateView.Busy && updateView.AvailableVersion is not null && updateView.ReadyVersion != updateView.AvailableVersion) UpdateDownloadRequested?.Invoke(); break;
+                case 4704: if (toolsKind == "updates" && updateView.Supported && !updateView.Busy && (updateView.AvailableVersion is not null || updateView.ReadyVersion is not null)) UpdateInstallRequested?.Invoke(); break;
                 case 4705: if (toolsKind == "updates") ToggleUpdateDetails(); break;
                 case 4481: if (toolsKind == "wake") SaveWakePhrases(); break;
                 case 4482: if (toolsKind == "wake") WakePreparationRetryRequested?.Invoke(); break;

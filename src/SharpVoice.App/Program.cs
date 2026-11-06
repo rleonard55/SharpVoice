@@ -1,6 +1,7 @@
 using System.Net;
 using SharpVoice.Core;
 using SharpVoice.Platform.Windows.Native;
+using SharpVoice.Platform.Windows;
 using SharpVoice.Refiner.Auth;
 using SharpVoice.UI;
 using Velopack;
@@ -57,8 +58,12 @@ internal static class Program
         }
         using var desktop = new NativeDesktop(config);
         desktop.Initialize(showSettings: false);
-        using var app = new SharpVoiceApp(config, desktop, http, auth);
-        using var updates = new AppUpdateHost(config, desktop, app, updater);
+        var plugins = new EditorPlugins();
+        using var app = new SharpVoiceApp(config, desktop, http, auth, plugins: plugins);
+        using var pluginUpdates = new EditorPluginMaintenance(plugins,
+            Path.Combine(Path.GetDirectoryName(AppPaths.Config)!, "editor-plugin-update.version"), updater.CurrentVersion);
+        if (updater.Supported) pluginUpdates.Start(message => desktop.Post(() => desktop.SetPluginUpdateStatus(message)));
+        using var updates = new AppUpdateHost(config, desktop, app, updater, () => pluginUpdates.Completion.IsCompleted);
         app.Start(warning);
         desktop.ShowSetupIfNeeded();
         desktop.Run();

@@ -30,15 +30,13 @@ internal sealed partial class SharpVoiceApp
         if (editorSession.Busy || phase != Phase.Idle || desktop.IsPaused || !environment.EditorIntegration) return false;
         var window = environment.CaptureTarget();
         if (!EditorPlugins.IsSupportedEditor(window.ProcessName)) return false;
-        if (!microphoneReady || authBusy || WritingTools.Resolve(config, window.ProcessName).Backend == "none")
-        {
-            desktop.SetStatus("Editor voice shortcuts need a ready microphone and an AI provider. Review Audio and AI & Models.", true, isError: true);
-            desktop.ResetRecordingGesture(); return true;
-        }
+        // A supported process may be showing chat or a welcome page, without a plugin.
+        // In that case the configured shortcut remains ordinary desktop voice input.
         var client = editorBridge?.ConnectedClientId;
-        if (client is null)
+        if (client is null) return false;
+        if (!microphoneReady || authBusy)
         {
-            desktop.SetStatus($"Open or update the SharpVoice plugin in the focused editor, then retry {(mode == VoiceMode.AskAi ? "Ask AI" : "Dictation")}. No text was inserted.", true, isError: true);
+            desktop.SetStatus("Wait for microphone preparation or sign-in to finish before using editor voice shortcuts.", true, isError: true);
             desktop.ResetRecordingGesture(); return true;
         }
         StopAnswerSpeech(); desktop.HideAnswer();
@@ -60,6 +58,28 @@ internal sealed partial class SharpVoiceApp
                 desktop.SetStatus("Editor connection unavailable · Reopen the SharpVoice plugin and retry. No text was inserted.", true, isError: true);
             });
         }
+    }
+    private void AcceptDesktopHotkeyFallback(EditorFrame frame)
+    {
+        if (!editorHotkey.Pending || frame.Id != editorHotkey.Id || frame.ClientId != editorHotkeyClient) return;
+        var mode = editorHotkey.Mode;
+        var expected = editorHotkeyTarget;
+        var current = environment.CaptureTarget();
+        var allowed = frame.State == "no_editor" && frame.Mode == (mode == VoiceMode.AskAi ? "ask" : "dictate")
+            && frame.Context is null && frame.Instruction is null && frame.Result is null
+            && !editorHotkey.Expired(DateTimeOffset.UtcNow) && expected is not null
+            && current.Handle == expected.Handle && current.ProcessId == expected.ProcessId && current.Focus == expected.Focus
+            && phase == Phase.Idle && !editorSession.Busy && !desktop.IsPaused && !authBusy && !lifetime.IsCancellationRequested;
+        CancelEditorHotkey();
+        if (!allowed)
+        {
+            desktop.ResetRecordingGesture();
+            desktop.SetStatus("Editor handoff changed or expired. Retry the shortcut in the field you want.");
+            return;
+        }
+        // Bypass editor routing once, keeping the original gesture and normal desktop target checks.
+        RequestVoicePressed(mode);
+        if (!pendingVoiceStart && phase is not (Phase.Arming or Phase.Recording)) desktop.ResetRecordingGesture();
     }
     private void CancelEditorHotkey()
     {

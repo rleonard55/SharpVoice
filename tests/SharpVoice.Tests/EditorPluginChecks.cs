@@ -69,6 +69,118 @@ internal static class EditorPluginChecks
         if (!EditorPlugins.IsSupportedEditor("Code") || !EditorPlugins.IsSupportedEditor("Antigravity") || EditorPlugins.IsSupportedEditor("notepad")) throw new Exception("Editor process recognition failed.");
     }
 
+    public static async Task AutomaticUpdates()
+    {
+        using var vscode = new Fixture(); using var insiders = new Fixture(); using var antigravity = new Fixture();
+        var paths = new Dictionary<string, string> { ["vscode"] = vscode.Executable, ["insiders"] = insiders.Executable, ["antigravity"] = antigravity.Executable };
+        var versions = new Dictionary<string, string?> { ["vscode"] = "0.0.1", ["insiders"] = EditorPlugins.BundledVersion, ["antigravity"] = "99.0.0" };
+        var installs = new List<string>(); string? failure = null;
+        var plugins = new EditorPlugins(id => paths.GetValueOrDefault(id), (start, ct) =>
+        {
+            ct.ThrowIfCancellationRequested();
+            var id = paths.Single(x => x.Value == start.FileName).Key;
+            if (id == failure) throw new InvalidOperationException("Synthetic editor is locked.");
+            if (start.ArgumentList.Contains("--install-extension"))
+            {
+                if (start.ArgumentList.Contains("--force")) throw new Exception("Automatic update forced a downgrade.");
+                installs.Add(id); versions[id] = EditorPlugins.BundledVersion;
+                return Task.FromResult(new EditorPluginCommandResult(0, "Installed"));
+            }
+            return Task.FromResult(new EditorPluginCommandResult(0, versions[id] is { } version ? "sharpvoice.sharpvoice-vscode@" + version : ""));
+        });
+        var result = await plugins.UpdateInstalledAsync(default);
+        if (!installs.SequenceEqual(new[] { "vscode" }) || result.Any(x => x.Error is not null)) throw new Exception("Automatic update failed version eligibility.");
+        installs.Clear(); versions["insiders"] = null; paths.Remove("antigravity");
+        result = await plugins.UpdateInstalledAsync(default);
+        if (installs.Count != 0 || result.Any(x => x.Error is not null)) throw new Exception("Missing plugin/editor was installed or equal version reinstalled.");
+        paths["antigravity"] = antigravity.Executable; versions["antigravity"] = "0.0.1"; failure = "vscode";
+        result = await plugins.UpdateInstalledAsync(default);
+        if (result.Count(x => x.Error is not null) != 1 || !installs.SequenceEqual(new[] { "antigravity" })) throw new Exception("One failed editor blocked another update.");
+        using var canceled = new CancellationTokenSource(); canceled.Cancel();
+        try { await plugins.UpdateInstalledAsync(canceled.Token); throw new Exception("Automatic update ignored cancellation."); } catch (OperationCanceledException) { }
+    }
+
+    public static async Task AutomaticUpdateSerialization()
+    {
+        using var fixture = new Fixture();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var installed = "0.0.1"; var installs = 0;
+        var plugins = new EditorPlugins(id => id == "vscode" ? fixture.Executable : null, async (start, ct) =>
+        {
+            if (start.ArgumentList.Contains("--install-extension"))
+            {
+                installs++; entered.TrySetResult(); await release.Task.WaitAsync(ct);
+                installed = EditorPlugins.BundledVersion;
+                return new EditorPluginCommandResult(0, "Installed");
+            }
+            return new EditorPluginCommandResult(0, "sharpvoice.sharpvoice-vscode@" + installed);
+        });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var manual = plugins.InstallAsync("vscode", timeout.Token);
+        await entered.Task.WaitAsync(timeout.Token);
+        var automatic = plugins.UpdateInstalledAsync(timeout.Token);
+        release.SetResult();
+        await manual; var results = await automatic;
+        if (installs != 1 || results.Any(x => x.Updated || x.Error is not null)) throw new Exception("Manual and automatic installers raced or reinstalled a current package.");
+    }
+
+    public static async Task AutomaticUpdateCancellation()
+    {
+        using var fixture = new Fixture();
+        using var cancel = new CancellationTokenSource();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempts = 0; var installed = "0.0.1";
+        var plugins = new EditorPlugins(id => id == "vscode" ? fixture.Executable : null, async (start, ct) =>
+        {
+            if (start.ArgumentList.Contains("--install-extension"))
+            {
+                if (++attempts == 1) { entered.SetResult(); await Task.Delay(Timeout.Infinite, ct); }
+                installed = EditorPlugins.BundledVersion;
+            }
+            return new EditorPluginCommandResult(0, "sharpvoice.sharpvoice-vscode@" + installed);
+        });
+        var pending = plugins.UpdateInstalledAsync(cancel.Token);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10)); cancel.Cancel();
+        try { await pending; throw new Exception("Canceled active plugin installation completed successfully."); } catch (OperationCanceledException) { }
+        using var retryLimit = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var retry = await plugins.UpdateInstalledAsync(retryLimit.Token);
+        if (attempts != 2 || retry.Count(x => x.Updated) != 1 || retry.Any(x => x.Error is not null)) throw new Exception("Canceled installation held its gate or prevented retry.");
+    }
+
+    public static async Task AutomaticUpdateStamp()
+    {
+        using var fixture = new Fixture();
+        var root = Path.Combine(Path.GetTempPath(), "SharpVoice-plugin-maintenance-" + Guid.NewGuid().ToString("N"));
+        var stamp = Path.Combine(root, "plugin.version"); var installed = "0.0.1"; var calls = 0; var fail = false;
+        var messages = new List<string>();
+        var plugins = new EditorPlugins(id => id == "vscode" ? fixture.Executable : null, (start, ct) =>
+        {
+            calls++; ct.ThrowIfCancellationRequested();
+            if (fail) throw new InvalidOperationException("Synthetic failure.");
+            if (start.ArgumentList.Contains("--install-extension")) installed = EditorPlugins.BundledVersion;
+            return Task.FromResult(new EditorPluginCommandResult(0, "sharpvoice.sharpvoice-vscode@" + installed));
+        });
+        try
+        {
+            using var first = new SharpVoice.App.EditorPluginMaintenance(plugins, stamp, "1.0.0");
+            await first.RunAsync(messages.Add, default);
+            if (!File.Exists(stamp) || installed != EditorPlugins.BundledVersion || !messages.Last().Contains("Reload")) throw new Exception("First app-version maintenance did not verify and stamp its update.");
+            var before = calls; await first.RunAsync(messages.Add, default);
+            if (calls != before) throw new Exception("Unchanged app/package version queried editors again.");
+            using var next = new SharpVoice.App.EditorPluginMaintenance(plugins, stamp, "1.0.1");
+            fail = true; await next.RunAsync(messages.Add, default);
+            if (!File.ReadAllText(stamp).StartsWith("1.0.0|") || !messages.Last().Contains("attention")) throw new Exception("Failed maintenance advanced its stamp or hid recovery guidance.");
+            fail = false; await next.RunAsync(messages.Add, default);
+            if (!File.ReadAllText(stamp).StartsWith("1.0.1|")) throw new Exception("Failed maintenance could not retry.");
+            using var canceled = new CancellationTokenSource(); canceled.Cancel();
+            using var later = new SharpVoice.App.EditorPluginMaintenance(plugins, stamp, "1.0.2");
+            before = calls; await later.RunAsync(messages.Add, canceled.Token);
+            if (calls != before || !File.ReadAllText(stamp).StartsWith("1.0.1|")) throw new Exception("Canceled maintenance changed state.");
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     private sealed class Fixture : IDisposable
     {
         private readonly string root = Path.Combine(Path.GetTempPath(), "SharpVoice Plugins " + Guid.NewGuid().ToString("N"));

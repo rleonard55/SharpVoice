@@ -6,6 +6,9 @@ namespace SharpVoice.UI;
 
 public sealed partial class NativeDesktop
 {
+    private nint setupTitle, setupTagline, setupClear;
+    private readonly List<nint> setupSteps = [];
+    private string? unavailableSetupDevice;
     private nint setupWindow, setupNotice, setupBack, setupNext, setupMic, setupMeter, setupLevel, setupResult, setupPracticeButton;
     private readonly List<nint> setupControls = [], setupPageControls = [];
     private readonly Dictionary<nint, int> setupButtons = [];
@@ -30,13 +33,16 @@ public sealed partial class NativeDesktop
         setupSession++; setupStep = 0; setupBusy = setupRecording = setupInSettings = false;
         Win32.SystemParametersInfoW(0x30, 0, out var area, 0);
         setupWindow = Create(0, "SharpVoice.Native", "SharpVoice · Setup", 0x00CA0000,
-            Math.Max(area.Left, area.Left + (area.Right - area.Left - 700) / 2), Math.Max(area.Top, area.Top + (area.Bottom - area.Top - 640) / 2), 700, 640, 0, 0);
-        var title = SetupControl("STATIC", "Welcome to SharpVoice", 0, 32, 22, 620, 36);
-        Win32.SendMessageW(title, 0x30, (nuint)headingFont, 1);
-        setupNotice = SetupControl("STATIC", "", 0, 32, 462, 620, 50);
-        SetupButton("Skip Setup", 4801, 32, 530, 150);
-        setupBack = SetupButton("Back", 4802, 362, 530, 120);
-        setupNext = SetupButton("Next", 4803, 496, 530, 156);
+            Math.Max(area.Left, area.Left + (area.Right - area.Left - 700) / 2), Math.Max(area.Top, area.Top + (area.Bottom - area.Top - 700) / 2), 700, 700, 0, 0);
+        setupTitle = SetupControl("STATIC", "SharpVoice", 0xD, 96, 22, 550, 36);
+        setupTagline = SetupControl("STATIC", "Set up your voice. Make it yours.", 0xD, 96, 60, 550, 24);
+        string[] steps = ["Microphone", "Shortcuts", "AI Setup", "Practice"];
+        for (var i = 0; i < steps.Length; i++)
+            setupSteps.Add(SetupControl("STATIC", $"{i + 1}  {steps[i]}", 0xD, 24 + i * 162, 112, 154, 40, 4811 + i));
+        setupNotice = SetupControl("STATIC", "", 0, 32, 514, 620, 58);
+        SetupButton("Skip Setup", 4801, 32, 600, 150);
+        setupBack = SetupButton("Back", 4802, 362, 600, 120);
+        setupNext = SetupButton("Next", 4803, 496, 600, 156);
         RenderSetupStep(); ApplyTheme(); ApplyMicrophoneIcon();
         Win32.SetTimer(setupWindow, 7, 100, 0);
         Win32.ShowWindow(setupWindow, 5); Win32.SetForegroundWindow(setupWindow);
@@ -57,56 +63,98 @@ public sealed partial class NativeDesktop
         var button = SetupControl("BUTTON", text, 0x1000B, x, y, width, 36, id, page);
         setupButtons[button] = id; return button;
     }
-    private void SetupText(string text, int y, int height = 60) => SetupControl("STATIC", text, 0, 32, y, 620, height, page: true);
+    private void SetupText(string text, int y, int height = 60) => SetupControl("STATIC", text, 0, 40, y, 600, height, page: true);
     private unsafe void RenderSetupStep()
     {
         StopSetupPreview();
         foreach (var control in setupPageControls) { setupButtons.Remove(control); setupControls.Remove(control); Win32.DestroyWindow(control); }
-        setupPageControls.Clear(); setupMic = setupMeter = setupLevel = setupResult = setupPracticeButton = 0;
+        setupPageControls.Clear(); setupMic = setupMeter = setupLevel = setupResult = setupPracticeButton = setupClear = 0;
         var titles = new[] { "Your Microphone", "Your Shortcuts", "Optional AI Cleanup", "Try Dictation" };
-        SetupControl("STATIC", $"STEP {setupStep + 1} OF 4  ·  {titles[setupStep]}", 0, 32, 76, 620, 28, page: true);
+        var heading = SetupControl("STATIC", titles[setupStep], 0, 40, 186, 600, 32, page: true);
+        Win32.SendMessageW(heading, 0x30, (nuint)headingFont, 1);
+        foreach (var step in setupSteps) Win32.InvalidateRect(step, 0, 1);
         Win32.SetWindowTextW(setupNotice, "You can skip setup at any time. Use Settings for later changes.");
         Win32.EnableWindow(setupBack, setupStep > 0 ? 1 : 0);
         Win32.SetWindowTextW(setupNext, setupStep == 3 ? "Finish Setup" : setupStep == 2 && config.Backend == "none" ? "Skip AI Setup" : "Next");
         if (setupStep == 0)
         {
-            SetupText("SharpVoice transcribes locally. Choose a microphone, then test its input level. The microphone test starts only when you click Test Microphone.", 126, 76);
-            SetupText("Microphone", 216, 26);
-            setupMic = SetupControl("COMBOBOX", "", 0x210213, 32, 248, 620, 220, 4808, true);
+            SetupText("SharpVoice transcribes locally. Choose a microphone, then test its input level. The microphone test starts only when you click Test Microphone.", 232, 70);
+            SetupText("Microphone", 310, 26);
+            setupMic = SetupControl("COMBOBOX", "", 0x210213, 40, 340, 600, 220, 4808, true);
             if (Win32.SetWindowSubclass(setupMic, &ComboProcedure, 1, 0) == 0) throw new InvalidOperationException("Could not style the setup microphone selector.");
             try { setupDevices = AudioDeviceCatalog.Enumerate().ToList(); }
             catch { setupDevices = [new("", "Windows Default (System Microphone)")]; }
-            if (!setupDevices.Any(d => d.Id == config.AudioDeviceId)) setupDevices.Add(new(config.AudioDeviceId, "Unavailable Microphone (Choose Another)"));
+            unavailableSetupDevice = null;
+            if (!setupDevices.Any(d => d.Id == config.AudioDeviceId))
+            {
+                unavailableSetupDevice = config.AudioDeviceId;
+                setupDevices.Add(new(config.AudioDeviceId, "Unavailable Microphone (Choose Another)"));
+            }
             foreach (var device in setupDevices) AddComboItem(setupMic, device.Id.Length == 0 ? "Windows Default (System Microphone)" : device.Name);
             Win32.SendMessageW(setupMic, 0x14E, (nuint)Math.Max(0, setupDevices.FindIndex(d => d.Id == config.AudioDeviceId)), 0);
-            SetupButton("Test Microphone", 4804, 32, 300, 230, true);
-            setupMeter = SetupControl("msctls_progress32", "Microphone Input Level", 0, 32, 354, 620, 14, page: true);
-            setupLevel = SetupControl("STATIC", "Microphone test is off", 0, 32, 384, 620, 32, page: true);
+            SetupButton("Test Microphone", 4804, 40, 390, 230, true);
+            setupMeter = SetupControl("msctls_progress32", "Microphone Input Level", 0, 40, 444, 600, 10, page: true);
+            setupLevel = SetupControl("STATIC", "Microphone test is off", 0, 40, 466, 600, 26, page: true);
         }
         else if (setupStep == 1)
         {
             SetupText(config.RecordingGesture == "toggle"
                 ? "Focus a text field in any app. Press the dictation shortcut, wait for the start tone, speak, then press again to insert your words."
-                : "Focus a text field in any app. Hold the dictation shortcut, wait for the start tone, speak, then release to insert your words.", 126, 76);
-            SetupText($"Dictate:  {HotkeyDefinition.DisplayName(config.Hotkey)}\nAsk AI:  {HotkeyDefinition.DisplayName(config.AskHotkey)} (Requires an AI Provider)", 230, 90);
-            SetupText(config.RecordingGesture == "toggle" ? "Your gesture is Toggle: press once to start and again to stop." : "Your gesture is Hold to Talk: hold to record and release to stop.", 334, 50);
-            SetupButton("Customize Shortcuts", 4805, 32, 402, 250, true);
+                : "Focus a text field in any app. Hold the dictation shortcut, wait for the start tone, speak, then release to insert your words.", 232, 70);
+            SetupText($"Dictate:  {HotkeyDefinition.DisplayName(config.Hotkey)}\nAsk AI:  {HotkeyDefinition.DisplayName(config.AskHotkey)} (Requires an AI Provider)", 320, 64);
+            SetupText(config.RecordingGesture == "toggle" ? "Your gesture is Toggle: press once to start and again to stop." : "Your gesture is Hold to Talk: hold to record and release to stop.", 390, 48);
+            SetupButton("Customize Shortcuts", 4805, 40, 450, 250, true);
         }
         else if (setupStep == 2)
         {
-            SetupText("AI is optional. Local transcription works without an account. AI cleanup sends text to your chosen provider unless you choose Local AI.", 126, 76);
-            SetupText("Current Choice: " + ChoiceLabel("Backend", config.Backend), 232, 58);
-            SetupText("Use the existing AI settings to select a provider, sign in or add a key, download a local model, and Test Connection. Apply Settings returns you here.", 306, 76);
-            SetupButton("Set Up AI (Optional)", 4806, 32, 402, 250, true);
+            SetupText("AI is optional. Local transcription works without an account. AI cleanup sends text to your chosen provider unless you choose Local AI.", 232, 70);
+            SetupText("Current Choice: " + ChoiceLabel("Backend", config.Backend), 320, 32);
+            SetupText("Use the existing AI settings to select a provider, sign in or add a key, download a local model, and Test Connection. Apply Settings returns you here.", 362, 72);
+            SetupButton("Set Up AI (Optional)", 4806, 40, 450, 250, true);
         }
         else
         {
             var gesture = config.RecordingGesture == "toggle" ? "Press your dictation shortcut to start and again to stop" : "Hold and release your dictation shortcut";
-            SetupText("Try saying “SharpVoice helps me write with my voice.” " + gesture + ", or use Start/Stop Recording. Practice stays here: no AI, history, or paste.", 126, 76);
-            setupResult = SetupControl("EDIT", "", 0x00A11844, 32, 222, 620, 152, 4810, true);
-            setupPracticeButton = SetupButton("Start Recording", 4807, 32, 402, 230, true);
+            SetupText("Try saying “SharpVoice helps me write with my voice.” " + gesture + ", or use Start/Stop Recording. Practice stays here: no AI, history, or paste.", 232, 70);
+            setupResult = SetupControl("EDIT", "", 0x00A11844, 40, 318, 600, 116, 4810, true);
+            setupPracticeButton = SetupButton("Start Recording", 4807, 40, 450, 230, true);
+            setupClear = SetupButton("Clear Text", 4809, 440, 450, 200, true);
+            Win32.EnableWindow(setupClear, 0);
         }
-        ApplyTheme(); Win32.InvalidateRect(setupWindow, 0, 1);
+        RefreshSetupActions(); ApplyTheme(); Win32.InvalidateRect(setupWindow, 0, 1);
+    }
+
+    private void RefreshSetupActions()
+    {
+        var available = true;
+        if (setupStep == 0 && setupMic != 0)
+        {
+            var index = (int)Win32.SendMessageW(setupMic, 0x147, 0, 0);
+            available = index >= 0 && index < setupDevices.Count && setupDevices[index].Id != unavailableSetupDevice;
+            Win32.EnableWindow(Win32.GetDlgItem(setupWindow, 4804), available ? 1 : 0);
+            Win32.SetWindowTextW(setupNotice, available ? "Test when you are ready. You can skip setup and change these settings later."
+                : "This microphone is unavailable. Choose another microphone or skip setup.");
+        }
+        Win32.EnableWindow(setupNext, available && !setupBusy ? 1 : 0);
+    }
+    private void PaintSetup(nint dc)
+    {
+        PaintSettingsHeader(dc);
+        PaintCard(dc, new Win32.Rect { Left = 24, Top = 174, Right = 660, Bottom = 502 }, setupStep == 0 ? 0 : setupStep == 1 ? 3 : 1);
+        var divider = new Win32.Rect { Left = 32, Top = 582, Right = 652, Bottom = 583 };
+        Win32.FillRect(dc, in divider, borderBrush);
+    }
+    private unsafe bool DrawSetupStep(Win32.DrawItem* draw)
+    {
+        var index = setupSteps.IndexOf(draw->Window);
+        if (index < 0) return false;
+        Win32.FillRect(draw->Dc, in draw->Rect, background);
+        var box = draw->Rect;
+        if (index == setupStep) Rounded(draw->Dc, box, selectionBrush, 12);
+        string[] icons = ["\uE720", "\uE765", "\uE8F1", "\uE768"];
+        DrawIconLabel(draw->Dc, Text(draw->Window), index < setupStep ? "\uE73E" : icons[index], box,
+            index == setupStep ? theme.Text : theme.Muted, index < setupStep ? theme.Success : theme.TabAccent(index == 0 ? 0 : index == 1 ? 3 : 1));
+        return true;
     }
 
     private void ApplySetupMicrophone()
@@ -114,6 +162,7 @@ public sealed partial class NativeDesktop
         var index = (int)Win32.SendMessageW(setupMic, 0x147, 0, 0);
         if (index < 0 || index >= setupDevices.Count) throw new InvalidOperationException("Choose a microphone first.");
         var id = setupDevices[index].Id;
+        if (id == unavailableSetupDevice) throw new InvalidOperationException("This microphone is unavailable. Choose another microphone or skip setup.");
         if (id == config.AudioDeviceId) return;
         if (CanConfigureSetup?.Invoke() == false) throw new InvalidOperationException("SharpVoice is getting ready. Please try again in a moment.");
         var next = config with { AudioDeviceId = id };
@@ -161,6 +210,7 @@ public sealed partial class NativeDesktop
         setupBusy = busy; setupRecording = recording;
         if (!SetupOpen) return;
         Win32.EnableWindow(setupBack, !busy && setupStep > 0 ? 1 : 0); Win32.EnableWindow(setupNext, busy ? 0 : 1);
+        if (setupClear != 0) Win32.EnableWindow(setupClear, !busy && Text(setupResult).Length > 0 ? 1 : 0);
         if (setupPracticeButton != 0)
         {
             Win32.SetWindowTextW(setupPracticeButton, recording ? "Stop Recording" : busy ? "Working…" : "Start Recording");
@@ -169,7 +219,11 @@ public sealed partial class NativeDesktop
     }
     public void SetSetupPracticeResult(string text, int session)
     {
-        if (SetupOpen && setupStep == 3 && setupSession == session) Win32.SetWindowTextW(setupResult, text);
+        if (SetupOpen && setupStep == 3 && setupSession == session)
+        {
+            Win32.SetWindowTextW(setupResult, text);
+            Win32.EnableWindow(setupClear, !setupBusy && text.Length > 0 ? 1 : 0);
+        }
     }
     private void DismissSetup()
     {
@@ -181,7 +235,7 @@ public sealed partial class NativeDesktop
         StopSetupPreview();
         var old = setupWindow; setupWindow = 0; setupSession++; setupInSettings = false;
         if (old != 0) { Win32.KillTimer(old, 7); Win32.DestroyWindow(old); }
-        setupControls.Clear(); setupPageControls.Clear(); setupButtons.Clear(); setupNotice = setupResult = 0;
+        setupControls.Clear(); setupPageControls.Clear(); setupButtons.Clear(); setupSteps.Clear(); setupTitle = setupTagline = setupClear = setupNotice = setupResult = 0;
     }
     private bool HandleSetupInput(in Win32.Msg message)
     {
@@ -216,7 +270,7 @@ public sealed partial class NativeDesktop
             }
             if (message != 0x111) return false;
             var id = (int)(wParam & 0xFFFF); var notification = wParam >> 16;
-            if (id == 4808 && notification == 1) { StopSetupPreview(); Win32.SetWindowTextW(Win32.GetDlgItem(setupWindow, 4804), "Test Microphone"); return true; }
+            if (id == 4808 && notification == 1) { StopSetupPreview(); Win32.SetWindowTextW(Win32.GetDlgItem(setupWindow, 4804), "Test Microphone"); RefreshSetupActions(); return true; }
             if (notification != 0) return false;
             switch (id)
             {
@@ -228,9 +282,10 @@ public sealed partial class NativeDesktop
                     else { if (setupStep == 0) { StopSetupPreview(); ApplySetupMicrophone(); } setupStep++; RenderSetupStep(); }
                     break;
                 case 4804: ToggleSetupPreview(); break;
-                case 4805: OpenSetupSettings(3); break;
-                case 4806: OpenSetupSettings(1); break;
-                case 4807: SetupPracticeRequested?.Invoke(); break;
+                case 4805: if (setupStep == 1 && !setupBusy) OpenSetupSettings(3); break;
+                case 4806: if (setupStep == 2 && !setupBusy) OpenSetupSettings(1); break;
+                case 4807: if (setupStep == 3 && (!setupBusy || setupRecording)) SetupPracticeRequested?.Invoke(); break;
+                case 4809: if (!setupBusy && setupResult != 0) { Win32.SetWindowTextW(setupResult, ""); Win32.EnableWindow(setupClear, 0); } break;
             }
             return true;
         }

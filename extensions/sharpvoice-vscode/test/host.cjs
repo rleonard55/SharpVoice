@@ -9,6 +9,14 @@ exports.run=async()=>{
   const frames=[];const channel={connect:async()=>{},send:f=>{frames.push(f);if(f.type==='applying')queueMicrotask(()=>controller.receive({type:'apply_ready',id:f.id}));},dispose:()=>{}};
   controller=new VoiceEditorController(()=>channel,()=>true);
   async function start(mode){await controller.start(mode);assert.equal(controller.pendingState,'arming');await controller.receive({type:'status',id:controller.pendingId,message:'recording'});}
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  assert.equal(vscode.window.activeTextEditor,undefined);
+  for(const mode of ['dictate','ask']){
+   const id='empty-'+mode;await controller.receive({type:'hotkey_start',id,mode});
+   assert.equal(frames.at(-1).type,'hotkey_fallback');assert.equal(frames.at(-1).id,id);assert.equal(frames.at(-1).state,'no_editor');
+   assert.equal(controller.pendingId,undefined);assert.equal(vscode.window.activeTextEditor,undefined);
+  }
+  logs.push('PASS no-source editor view returns Dictation and Ask to desktop without opening a source editor');
   const doc=await vscode.workspace.openTextDocument({language:'typescript',content:'const value = 1;\n'});let editor=await vscode.window.showTextDocument(doc);
   editor.selection=new vscode.Selection(0,0,0,16);
   await controller.receive({type:'hotkey_start',id:'desktop-shortcut',mode:'dictate'});

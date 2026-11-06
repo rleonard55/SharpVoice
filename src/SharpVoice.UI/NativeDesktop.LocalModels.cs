@@ -40,8 +40,9 @@ public sealed partial class NativeDesktop
         Win32.ShowWindow(localDownloadButton, local && onPage ? 5 : 0);
         Win32.ShowWindow(localDownloadBar, local && onPage ? 5 : 0);
         if (helpEntries.TryGetValue(2113, out var help)) Win32.ShowWindow(help.Button, local && onPage ? 5 : 0);
-        Win32.EnableWindow(localDownloadButton, local && model is not null && !active && !localDownloadCancelling && connectionCancellation is null && LocalModelDownloadRequested is not null ? 1 : 0);
-        Win32.SetWindowTextW(localDownloadButton, localDownloadCancellation is null ? "Download Model" : localDownloadCancelling ? "Canceling…" : "Cancel Download");
+        var present = local && IsLocalModelPresent?.Invoke(selected) == true;
+        Win32.EnableWindow(localDownloadButton, (!present || localDownloadCancellation is not null) && local && model is not null && !active && !localDownloadCancelling && connectionCancellation is null && LocalModelDownloadRequested is not null ? 1 : 0);
+        Win32.SetWindowTextW(localDownloadButton, localDownloadCancellation is null ? present ? "Model Ready" : "Download Model" : localDownloadCancelling ? "Canceling…" : "Cancel Download");
         if (!local) return;
         var text = model is null ? "Choose a supported local model." : localMessage.Length != 0 ? localMessage
             : (IsLocalModelPresent?.Invoke(selected) == true ? "Downloaded" : "Not Downloaded") + $" · {model.SizeBytes / 1_000_000d:F0} MB";
@@ -59,7 +60,7 @@ public sealed partial class NativeDesktop
         }
         var selected = SelectedModelId();
         var model = LocalAiModels.Find(selected);
-        if (SelectedChoice("Backend") != "embedded" || model is null) return;
+        if (SelectedChoice("Backend") != "embedded" || model is null || IsLocalModelPresent?.Invoke(selected) == true) return;
         localSelection = selected; localMessage = "Checking Download…"; localDownloadPercent = 0;
         var owner = new CancellationTokenSource(); localDownloadCancellation = owner;
         var request = ++localDownloadGeneration;

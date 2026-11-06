@@ -192,6 +192,7 @@ public sealed partial class NativeDesktop : IDisposable
         hudPreview = text;
         Win32.SetWindowTextW(previewControl, text);
         if (retain) lastText = text;
+        Win32.EnableWindow(Win32.GetDlgItem(settingsWindow, 104), lastText.Length > 0 ? 1 : 0);
         Win32.InvalidateRect(hudWindow, 0, 0);
     }
 
@@ -342,9 +343,9 @@ public sealed partial class NativeDesktop : IDisposable
             if (message is 0x133 or 0x134 or 0x138)
             {
                 var branded = lParam == self.settingsTitle || lParam == self.settingsTagline;
-                Win32.SetTextColor((nint)wParam, branded ? self.theme.HeaderText : lParam == self.monitoringIndicator ? self.inputMonitoringFailed ? self.theme.Warning : self.inputPreview ? self.theme.Success : self.theme.Muted : lParam == self.connectionStatus ? self.ConnectionStatusColor : lParam == self.answerModel || lParam == self.answerStatus ? self.theme.Muted : self.theme.Text);
+                Win32.SetTextColor((nint)wParam, branded ? self.theme.Text : lParam == self.monitoringIndicator ? self.inputMonitoringFailed ? self.theme.Warning : self.inputPreview ? self.theme.Success : self.theme.Muted : lParam == self.connectionStatus ? self.ConnectionStatusColor : lParam == self.answerModel || lParam == self.answerStatus ? self.theme.Muted : self.theme.Text);
                 if (branded) { Win32.SetBkMode((nint)wParam, 1); return Win32.GetStockObject(5); }
-                var inPage = self.pages.Any(page => page.Contains(lParam));
+                var inPage = self.pages.Any(page => page.Contains(lParam)) || self.setupPageControls.Contains(lParam) || (self.toolsKind == "updates" && self.updateCardControls.Contains(lParam));
                 var field = message is 0x133 or 0x134 || lParam == self.previewControl;
                 var hot = field && self.ControlIsHovered(lParam);
                 Win32.SetBkColor((nint)wParam, field ? hot ? self.theme.Selection : self.theme.Field : inPage ? self.theme.Surface : self.theme.Background);
@@ -414,7 +415,7 @@ public sealed partial class NativeDesktop : IDisposable
         int result;
         while ((result = Win32.GetMessageW(out var message, 0, 0, 0)) > 0)
         {
-            if (HandleSetupInput(in message) || HandleConnectedInput(in message) || HandleAnswerInput(in message) || HandleToolsInput(in message) || HandleLocalDownloadInput(in message) || HandleConnectionInput(in message) || HandleHelpInput(in message)) continue;
+            if (HandleSetupInput(in message) || HandleConnectedInput(in message) || HandleAnswerInput(in message) || HandleToolsInput(in message) || HandleSettingsInput(in message) || HandleLocalDownloadInput(in message) || HandleConnectionInput(in message) || HandleHelpInput(in message)) continue;
             if (setupWindow != 0 && Win32.IsWindowVisible(setupWindow) != 0 && Win32.IsDialogMessageW(setupWindow, message) != 0) continue;
             if (connectedWindow != 0 && Win32.IsWindowVisible(connectedWindow) != 0 && Win32.IsDialogMessageW(connectedWindow, message) != 0) continue;
             if (answerWindow != 0 && Win32.IsWindowVisible(answerWindow) != 0 && Win32.IsDialogMessageW(answerWindow, message) != 0) continue;

@@ -43,7 +43,7 @@ internal sealed partial class SharpVoiceApp : IDisposable
     private int modelCatalogGeneration;
     private DeferredDisposable<SelectionSnapshot> selectionCapture = new(Task.FromResult<SelectionSnapshot?>(null));
 
-    public SharpVoiceApp(AppConfig config, NativeDesktop desktop, HttpClient http, ChatGptAuthManager auth, VoiceEnvironment? environment = null)
+    public SharpVoiceApp(AppConfig config, NativeDesktop desktop, HttpClient http, ChatGptAuthManager auth, VoiceEnvironment? environment = null, EditorPlugins? plugins = null)
     {
         this.config = config; this.desktop = desktop; this.auth = auth;
         this.environment = environment ?? new(); historyStore = new(this.environment.HistoryPath);
@@ -62,7 +62,7 @@ internal sealed partial class SharpVoiceApp : IDisposable
         desktop.LocalModelDownloadRequested = DownloadLocalModel;
         desktop.IsLocalModelPresent = localModels.IsPresent;
         desktop.ConnectionTestRequested = TestConnection;
-        var editorPlugins = new EditorPlugins();
+        var editorPlugins = plugins ?? new EditorPlugins();
         desktop.PluginRequested = (id, install, ct) => install ? editorPlugins.InstallAsync(id, ct) : editorPlugins.GetStatusAsync(id, ct);
         refiner.ModelResolved += model =>
         {

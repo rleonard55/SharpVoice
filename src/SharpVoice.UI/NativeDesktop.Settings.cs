@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using SharpVoice.Audio;
 using SharpVoice.Core;
 using SharpVoice.Platform.Windows.Native;
@@ -7,7 +9,7 @@ namespace SharpVoice.UI;
 
 public sealed partial class NativeDesktop
 {
-    private static readonly string[] TabNames = ["Audio", "AI & models", "Prompts", "Hotkeys", "Insertion", "General"];
+    private static readonly string[] TabNames = ["Audio", "AI & Models", "Prompts", "Hotkeys", "Insertion", "General"];
     private readonly HashSet<nint> editableCombos = [];
     private readonly List<nint>[] pages = [[], [], [], [], [], []];
     private readonly Dictionary<string, string> promptDrafts = [];
@@ -39,8 +41,8 @@ public sealed partial class NativeDesktop
                 inputMonitoringFailed = true;
             }
         }
-        Win32.SetWindowTextW(monitoringIndicator, inputPreview ? "● Monitoring applied mic"
-            : inputMonitoringFailed ? "Monitoring unavailable" : "Monitoring suspended");
+        Win32.SetWindowTextW(monitoringIndicator, inputPreview ? "● Monitoring Applied Mic"
+            : inputMonitoringFailed ? "Monitoring Unavailable" : "Monitoring Suspended");
     }
     private void SetInputPreview(bool enabled)
     {
@@ -57,9 +59,9 @@ public sealed partial class NativeDesktop
         modelBackend = config.Backend;
         var controls = new Win32.CommonControls { Size = (uint)sizeof(Win32.CommonControls), Classes = 0x2C };
         if (Win32.InitCommonControlsEx(in controls) == 0) throw new InvalidOperationException("Could not initialize Windows settings controls.");
-        settingsTitle = Control("STATIC", "SharpVoice", 0xD, 32, 20, 650, 36);
+        settingsTitle = Control("STATIC", "SharpVoice", 0xD, 96, 22, 580, 36);
         Win32.SendMessageW(settingsTitle, 0x30, (nuint)headingFont, 1);
-        settingsTagline = Control("STATIC", "Your voice. Your words. Wherever you work.", 0xD, 32, 62, 650, 24);
+        settingsTagline = Control("STATIC", "Your voice. Your words. Wherever you work.", 0xD, 96, 60, 580, 24);
         statusControl = Control("STATIC", SettingsStatus(status, false), 0, 32, 99, 605, 38, 1024);
         AddHelp("Status", "Status and Shortcuts", 1900, 99);
         tabControl = Control("SysTabControl32", "", 0x2900 | 0x10000, 24, 145, 680, 36, 1014);
@@ -79,7 +81,7 @@ public sealed partial class NativeDesktop
         Button("Wake Phrases", 121, 40, 234, 176);
         AddHelp("WakePhrases", "Wake Phrases", 121, 237, 218);
         Button("Refresh Microphones", 105, 250, 234, 210);
-        monitoringIndicator = Control("STATIC", "Monitoring suspended", 0, 475, 242, 200, 25, 1042);
+        monitoringIndicator = Control("STATIC", "Monitoring Suspended", 0, 475, 242, 200, 25, 1042);
         AddChoice("Mic Activation", "MicrophoneActivation", 294, config.MicrophoneActivation, 1022);
         BuildAudioInput();
 
@@ -88,7 +90,7 @@ public sealed partial class NativeDesktop
         AddChoice("Speech Processing", "SpeechProcessing", 234, config.FastTranscription ? "fast" : "standard", 1041);
         AddChoice("AI Refinement", "Backend", 272, config.Backend, 1002);
         AddCombo("AI Model", "RefinementModel", 310, ModelSuggestions(config.Backend), config.RefinementModel, 1003, editable: true);
-        AddEdit("Minimum Words for AI", "MinimumAiWords", 348, config.MinimumAiWords.ToString(CultureInfo.InvariantCulture), 1021);
+        AddEdit("Minimum Words For AI", "MinimumAiWords", 348, config.MinimumAiWords.ToString(CultureInfo.InvariantCulture), 1021);
         modelHint = Control("STATIC", "", 0, 40, 386, 635, 23, 1017);
         retentionNotice = Control("STATIC", "Antigravity may retain history.", 0, 40, 435, 635, 20, 1023);
         connectionStatus = Control("STATIC", "", 0, 40, 411, 635, 22, 1025);
@@ -119,9 +121,9 @@ public sealed partial class NativeDesktop
         buildingPage = 3;
         string[] presets = ["Ctrl + Alt", "Ctrl + Alt + Shift", .. Enumerable.Range(1, 24).Select(x => $"F{x}"), HotkeyDefinition.DisplayName(config.Hotkey), HotkeyDefinition.DisplayName(config.AskHotkey)];
         var shortcuts = presets.Distinct().ToArray();
-        AddCombo("Hold to Dictate", "Hotkey", 196, shortcuts, HotkeyDefinition.DisplayName(config.Hotkey), 1005);
+        AddCombo("Dictation Shortcut", "Hotkey", 196, shortcuts, HotkeyDefinition.DisplayName(config.Hotkey), 1005);
         Button("Record Shortcut", 107, 250, 237, 195);
-        AddCombo("Hold to Ask AI", "AskHotkey", 300, shortcuts, HotkeyDefinition.DisplayName(config.AskHotkey), 1019);
+        AddCombo("Ask AI Shortcut", "AskHotkey", 300, shortcuts, HotkeyDefinition.DisplayName(config.AskHotkey), 1019);
         Button("Record AI Shortcut", 110, 250, 341, 215);
         captureLabel = Control("STATIC", "", 0, 40, 392, 635, 40);
 
@@ -134,7 +136,7 @@ public sealed partial class NativeDesktop
         AddEdit("Recording Limit · sec", "MaxRecordingSeconds", 308, config.MaxRecordingSeconds.ToString(CultureInfo.InvariantCulture), 1010);
 
         buildingPage = 5;
-        AddChoice("Start on Sign-In", "StartOnLogin", 196, config.StartOnLogin ? "On" : "Off", 1020);
+        AddChoice("Start On Sign-In", "StartOnLogin", 196, config.StartOnLogin ? "On" : "Off", 1020);
 
         AddChoice("History Storage", "PersistHistory", 236, config.PersistHistory ? "saved" : "memory", 1029);
         Button("Updates", 122, 40, 282, 285);
@@ -151,9 +153,10 @@ public sealed partial class NativeDesktop
         AddHelp("Turnaround", "Last Dictation Timing", 104, 550);
         previewControl = Control("EDIT", "", 0x00A11844, 32, 578, 664, 92, 1043);
         Button("Apply Settings", 101, 32, 694, 176);
-        cancelButton = Button("Cancel dictation", 108, 276, 694, 200);
+        cancelButton = Button("Cancel Dictation", 108, 276, 694, 200);
         Win32.ShowWindow(cancelButton, active ? 5 : 0);
-        Button("Copy Last Text", 104, 520, 694, 176);
+        var copy = Button("Copy Last Text", 104, 520, 694, 176);
+        Win32.EnableWindow(copy, lastText.Length > 0 ? 1 : 0);
         if (config.Backend == "chatgpt_oauth") SetAvailableModels([]);
         else if (config.Backend == "claude_code") SetClaudeModels();
         else if (config.Backend == "gemini_api") SetGoogleApiModels();
@@ -165,7 +168,38 @@ public sealed partial class NativeDesktop
         RefreshInputMeter();
     }
 
-    private nint Button(string text, int id, int x, int y, int width) => Control("BUTTON", text, 0x1000B, x, y, width, 36, id);
+    private readonly Dictionary<nint, int> settingsButtons = [];
+    private unsafe nint Button(string text, int id, int x, int y, int width)
+    {
+        var button = Control("BUTTON", text, 0x1000B, x, y, width, 36, id);
+        // These actions already have their own keyboard/subclass handlers.
+        if (id is not (112 or 113 or 124))
+        {
+            settingsButtons[button] = id;
+            if (Win32.SetWindowSubclass(button, &SettingsButtonProcedure, 4, 0) == 0)
+                throw new InvalidOperationException("Could not initialize Settings action.");
+        }
+        return button;
+    }
+    internal bool HandleSettingsInput(in Win32.Msg message)
+    {
+        if (!settingsButtons.TryGetValue(message.Hwnd, out var id) || message.Message is not (0x100 or 0x101) || message.WParam is not (13 or 32)) return false;
+        if (message.Message == 0x100 && ((long)message.LParam & (1L << 30)) == 0 && HoverIsWindowEnabled(message.Hwnd) != 0 && Win32.IsWindowVisible(message.Hwnd) != 0)
+            Win32.SendMessageW(settingsWindow, 0x111, (nuint)id, message.Hwnd);
+        return true;
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static unsafe nint SettingsButtonProcedure(nint hwnd, uint message, nuint wParam, nint lParam, nuint id, nuint data)
+    {
+        if (current is { } self)
+        {
+            var input = new Win32.Msg { Hwnd = hwnd, Message = message, WParam = wParam, LParam = lParam };
+            if (self.HandleSettingsInput(input)) return 0;
+            if (message == 0x87 && wParam is 13 or 32) return Win32.DefSubclassProc(hwnd, message, wParam, lParam) | 4;
+        }
+        if (message == 0x82) Win32.RemoveWindowSubclass(hwnd, &SettingsButtonProcedure, id);
+        return Win32.DefSubclassProc(hwnd, message, wParam, lParam);
+    }
     private void AddEdit(string label, string key, int y, string value, int id)
     {
         Control("STATIC", label, 0, 40, y + 5, 200, 25);
@@ -198,6 +232,7 @@ public sealed partial class NativeDesktop
     private void ShowSettingsPage(int page)
     {
         if (page < 0 || page >= pages.Length) return;
+        Win32.SendMessageW(tabControl, 0x130C, (nuint)page, 0);
         HideHelp();
         ClearControlHover();
         for (var i = 0; i < pages.Length; i++) foreach (var hwnd in pages[i]) Win32.ShowWindow(hwnd, i == page ? 5 : 0);
@@ -217,7 +252,7 @@ public sealed partial class NativeDesktop
         if (signInButton == 0 || signOutButton == 0 || !fields.TryGetValue("Backend", out var backend)) return;
         var provider = SelectedChoice("Backend");
         var action = RefinementAuthentication.ActionFor(provider, AccountSignedIn(provider));
-        Win32.SetWindowTextW(signInButton, provider == "gemini_api" ? "Manage API Key" : provider == "claude_code" ? "Claude Sign In" : "ChatGPT Sign In");
+        Win32.SetWindowTextW(signInButton, provider == "gemini_api" ? HasGeminiApiKey?.Invoke() == true ? "Manage API Key" : "Add API Key" : provider == "claude_code" ? "Claude Sign In" : "ChatGPT Sign In");
         Win32.SetWindowTextW(signOutButton, provider == "gemini_antigravity" ? "Google Account ▾" : provider == "claude_code" ? "Claude Account ▾" : "ChatGPT Account ▾");
         var onModelsTab = Win32.SendMessageW(tabControl, 0x130B, 0, 0) == 1;
         Win32.ShowWindow(signInButton, onModelsTab && (provider == "gemini_api" || action == ChatGptAccountAction.SignIn) ? 5 : 0);
@@ -225,6 +260,7 @@ public sealed partial class NativeDesktop
         var enabled = IsAuthenticationBusy?.Invoke() != true ? 1 : 0;
         Win32.EnableWindow(signInButton, enabled);
         Win32.EnableWindow(signOutButton, enabled);
+        Win32.EnableWindow(refreshModelsButton, provider == "chatgpt_oauth" && AccountSignedIn(provider) && enabled != 0 ? 1 : 0);
         RefreshConnectionTestControls();
     }
     private bool AccountSignedIn(string backend) => backend == "claude_code" ? IsClaudeSignedIn?.Invoke() ?? false : IsChatGptSignedIn?.Invoke() ?? false;

@@ -6,10 +6,12 @@ namespace SharpVoice.Platform.Windows;
 
 public sealed record EditorPluginTarget(string Id, string Name);
 public sealed record EditorPluginStatus(string Name, string? Executable, string? InstalledVersion, string BundledVersion, string Message, bool CanInstall, string Action);
+public sealed record EditorPluginUpdateResult(string Id, string Name, bool Updated, string? Error);
 public sealed record EditorPluginCommandResult(int ExitCode, string Output);
 
 public sealed class EditorPlugins(Func<string, string?>? locate = null, Func<ProcessStartInfo, CancellationToken, Task<EditorPluginCommandResult>>? run = null)
 {
+    private readonly SemaphoreSlim installationGate = new(1, 1);
     private const string ExtensionId = "sharpvoice.sharpvoice-vscode";
     private readonly Func<string, string?> find = locate ?? FindEditor;
     private readonly Func<ProcessStartInfo, CancellationToken, Task<EditorPluginCommandResult>> execute = run ?? RunAsync;
@@ -31,8 +33,50 @@ public sealed class EditorPlugins(Func<string, string?>? locate = null, Func<Pro
     }
     public async Task<EditorPluginStatus> InstallAsync(string id, CancellationToken ct)
     {
-        var before = await GetStatusAsync(id, ct).ConfigureAwait(false);
-        if (!before.CanInstall || before.Executable is null) throw new InvalidOperationException(before.Message);
+        await installationGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var before = await GetStatusAsync(id, ct).ConfigureAwait(false);
+            if (!before.CanInstall || before.Executable is null) throw new InvalidOperationException(before.Message);
+            return await InstallVerifiedAsync(id, before, ct).ConfigureAwait(false);
+        }
+        finally { installationGate.Release(); }
+    }
+    public async Task<IReadOnlyList<EditorPluginUpdateResult>> UpdateInstalledAsync(CancellationToken ct)
+    {
+        var results = new List<EditorPluginUpdateResult>();
+        foreach (var target in Targets)
+        {
+            ct.ThrowIfCancellationRequested();
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            deadline.CancelAfter(TimeSpan.FromMinutes(2));
+            try
+            {
+                await installationGate.WaitAsync(deadline.Token).ConfigureAwait(false);
+                try
+                {
+                    // Read inside the same gate as manual installation. Never install a missing
+                    // plugin, reinstall an equal version, or downgrade a newer editor version.
+                    var before = await GetStatusAsync(target.Id, deadline.Token).ConfigureAwait(false);
+                    var outdated = before.InstalledVersion is not null && before.Executable is not null
+                        && Version.Parse(before.InstalledVersion) < Version.Parse(before.BundledVersion);
+                    if (outdated) await InstallVerifiedAsync(target.Id, before, deadline.Token).ConfigureAwait(false);
+                    results.Add(new(target.Id, target.Name, outdated, null));
+                }
+                finally { installationGate.Release(); }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ct.ThrowIfCancellationRequested();
+                // One unavailable/locked editor must not stop other installed editors updating.
+                results.Add(new(target.Id, target.Name, false, "Automatic update failed. Open Plugins and Refresh to retry."));
+            }
+        }
+        return results;
+    }
+    private async Task<EditorPluginStatus> InstallVerifiedAsync(string id, EditorPluginStatus before, CancellationToken ct)
+    {
         // Unique, app-owned temporary package; no user-picked downloads and no extension-directory editing.
         var directory = Path.Combine(Path.GetTempPath(), "SharpVoice-plugin-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -41,7 +85,7 @@ public sealed class EditorPlugins(Func<string, string?>? locate = null, Func<Pro
             var package = Path.Combine(directory, "sharpvoice-vscode.vsix");
             using (var source = OpenPackage())
             await using (var output = File.Create(package)) await source.CopyToAsync(output, ct).ConfigureAwait(false);
-            var result = await execute(Start(before.Executable, "--install-extension", package), ct).ConfigureAwait(false);
+            var result = await execute(Start(before.Executable!, "--install-extension", package), ct).ConfigureAwait(false);
             if (result.ExitCode != 0) throw new InvalidOperationException("Plugin installation failed. Close the editor's installer, check its Extensions view and retry.");
             var after = await GetStatusAsync(id, ct).ConfigureAwait(false);
             if (after.InstalledVersion != after.BundledVersion) throw new InvalidOperationException("Installation could not be verified. Check the editor's Extensions view, then Refresh.");
@@ -50,7 +94,7 @@ public sealed class EditorPlugins(Func<string, string?>? locate = null, Func<Pro
         finally { try { Directory.Delete(directory, true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
     }
     private static Stream OpenPackage() => typeof(EditorPlugins).Assembly.GetManifestResourceStream("SharpVoice.EditorPlugin.vsix") ?? throw new InvalidOperationException("This build is missing its bundled editor plugin.");
-    internal static string BundledVersion
+    public static string BundledVersion
     {
         get
         {

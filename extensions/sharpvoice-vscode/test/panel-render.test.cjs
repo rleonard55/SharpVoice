@@ -22,6 +22,13 @@ test('sidebar renders provider text literally and keeps all conversation state o
  receive({data:{snapshot:{type:'workspace',host_id:'a',state:'idle',review_items:[{id:'h:1',file:'a.cs',line:3,preview:hostile,conflicted:false}],recovery_available:1,project_files:['AGENTS.md'],verification:'Task exited with code 0'}}});
  assert.equal(el('changes').children.length,1);assert.equal(el('recovery').hidden,false);assert.equal(el('verification').textContent,'Task exited with code 0');
  el('changes').children[0].children[1].listeners.click();assert.equal(posted.at(-1).action,'acceptChange');assert.equal(posted.at(-1).id,'h:1');
+ receive({data:{snapshot:{type:'workspace',host_id:'a',state:'clarify',review_items:[{id:'h:1',file:'a.cs',line:3,preview:'change',conflicted:false}]}}});
+ for(const button of el('changes').children[0].children)assert.equal(button.disabled,true,'Individual review must match batch review during clarification');
+ for(const id of ['new','mode','includeFile','conversations','delete','clear'])assert.equal(el(id).disabled,true,'Clarification must be answered or canceled before changing conversations');
+ receive({data:{snapshot:{type:'workspace',host_id:'a',state:'processing',conversation:{id:'c',turns:[]},conversations:[{id:'c'}]}}});
+ for(const id of ['new','delete','clear'])assert.equal(el(id).disabled,true,'Conversation actions must not cancel ongoing work implicitly');
+ receive({data:{snapshot:{type:'workspace',host_id:'a',state:'idle',conversations:[]}}});
+ for(const id of ['delete','clear','copy'])assert.equal(el(id).disabled,true,'Unavailable actions should be disabled');
  el('fix').listeners.click();assert.equal(posted.at(-1).action,'fix');
  el('reply').value='Make it vegetarian';el('send').listeners.click();assert.equal(posted.at(-1).text,'Make it vegetarian');assert.equal(posted.at(-1).includeFile,false);
  receive({data:{snapshot:{type:'workspace',host_id:'b',state:'idle',conversations:[]}}});assert.equal(el('reply').value,'');assert.equal(el('turns').children.length,0);
