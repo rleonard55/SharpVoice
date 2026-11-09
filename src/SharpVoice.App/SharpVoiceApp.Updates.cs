@@ -10,7 +10,10 @@ internal sealed partial class SharpVoiceApp
     {
         get
         {
-            lock (wakeGate) return WakeAllowsUpdate(recorder.IsWakeListening, wakeWork.IsCompleted,
+            // Capture callbacks hold the recorder lock before entering wakeGate.
+            // Read recorder state separately so the UI cannot take those locks in reverse.
+            var listening = recorder.IsWakeListening;
+            lock (wakeGate) return WakeAllowsUpdate(listening, wakeWork.IsCompleted,
                 wakeDetector?.IsRecognizing == true, wakeDetector?.Activity?.Silence);
         }
     }

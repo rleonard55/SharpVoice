@@ -12,6 +12,8 @@ using SharpVoice.Refiner.Auth;
 using SharpVoice.Speech;
 using SharpVoice.UI;
 
+if (args is ["--wake-idle-fixture", var wakeIdleMode]) { await WakeIdleChecks.RunFixture(wakeIdleMode == "on"); return 0; }
+if (args is ["--wake-idle-check"]) { await WakeIdleChecks.CaptureDoesNotBlockIdle(); Console.WriteLine("PASS wake idle and microphone lock ordering."); return 0; }
 if (args is ["--idle-memory-app", var idleModelRoot, var memoryActivation]) { WindowsHelpSmoke.RunIdleMemoryApp(idleModelRoot, memoryActivation); return 0; }
 if (args is ["--turnaround-whisper-benchmark", var turnaroundModel, var turnaroundWav]) { await TurnaroundChecks.Benchmark(turnaroundModel, turnaroundWav); return 0; }
 if (args is ["--turnaround-config-check"]) { await TurnaroundChecks.Preferences(); return 0; }
@@ -896,6 +898,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Disabling automatic updates cancels owned work without restarting", ReleaseUpdateChecks.Cancellation),
     ("One-click install checks, downloads, reuses verified updates and blocks unsafe restarts", ReleaseUpdateChecks.OneClickInstall),
     ("Wake speech and prefix recognition block update restart before activation", ReleaseUpdateChecks.WakeEligibility),
+    ("Wake microphone callbacks cannot deadlock the UI idle check", WakeIdleChecks.CaptureDoesNotBlockIdle),
     ("Installed sign-in startup resolves the stable launcher across updates", ReleaseUpdateChecks.StableStartup),
     ("Fast transcription preferences survive save and reload", TurnaroundChecks.Preferences),
     ("Fast transcription keeps full input, padding and long-recording context", TurnaroundChecks.DecodeBounds),
